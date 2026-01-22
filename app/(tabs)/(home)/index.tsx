@@ -64,26 +64,19 @@ export default function HomeScreen() {
   return (
     <SafeAreaView style={styles.safeArea} edges={['top']}>
       <View style={styles.container}>
-        {/* Header */}
+        {/* Compact Header */}
         <View style={styles.header}>
-          <View style={styles.headerContent}>
-            <Text style={styles.headerTitle}>Post-Op Radar</Text>
-            <Text style={styles.headerSubtitle}>Patient Monitoring Dashboard</Text>
+          <Text style={styles.headerTitle}>Post-Op Radar</Text>
+          <View style={styles.disclaimerCompact}>
+            <IconSymbol
+              ios_icon_name="info.circle"
+              android_material_icon_name="info"
+              size={14}
+              color={colors.textLight}
+              style={styles.disclaimerIcon}
+            />
+            <Text style={styles.disclaimerText}>Educational use only</Text>
           </View>
-        </View>
-
-        {/* Disclaimer Banner */}
-        <View style={styles.disclaimerBanner}>
-          <IconSymbol
-            ios_icon_name="info.circle.fill"
-            android_material_icon_name="info"
-            size={18}
-            color={colors.info}
-            style={styles.disclaimerIcon}
-          />
-          <Text style={styles.disclaimerText}>
-            Educational use only • Not for clinical decisions
-          </Text>
         </View>
 
         {/* Patient List */}
@@ -94,7 +87,9 @@ export default function HomeScreen() {
         >
           <View style={styles.listHeader}>
             <Text style={styles.listTitle}>Active Patients</Text>
-            <Text style={styles.patientCount}>{patients.length}</Text>
+            <View style={styles.countBadge}>
+              <Text style={styles.patientCount}>{patients.length}</Text>
+            </View>
           </View>
 
           {patients.map((patient, index) => {
@@ -110,47 +105,46 @@ export default function HomeScreen() {
                 key={index}
                 style={styles.patientCard}
                 onPress={() => handlePatientPress(patient.id)}
-                activeOpacity={0.6}
+                activeOpacity={0.7}
               >
+                {/* Alert Status Bar - Most Prominent */}
+                <View style={[styles.alertBar, { 
+                  backgroundColor: alertBgColor,
+                  borderLeftColor: alertColor,
+                }]}>
+                  <IconSymbol
+                    ios_icon_name="circle.fill"
+                    android_material_icon_name={alertIcon}
+                    size={14}
+                    color={alertColor}
+                  />
+                  <Text style={[styles.alertLabel, { color: alertColor }]}>
+                    {alertLabel}
+                  </Text>
+                </View>
+
                 <View style={styles.cardContent}>
-                  {/* Left: Patient Info */}
+                  {/* Patient Info - Clear Hierarchy */}
                   <View style={styles.patientInfo}>
                     <Text style={styles.patientName}>{patient.name}</Text>
-                    <Text style={styles.procedureType}>{patient.procedureType}</Text>
                     
                     <View style={styles.metaRow}>
                       <View style={styles.podBadge}>
                         <Text style={styles.podText}>{podText}</Text>
                       </View>
                     </View>
+                    
+                    <Text style={styles.procedureType}>{patient.procedureType}</Text>
                   </View>
 
-                  {/* Right: Alert Status */}
-                  <View style={styles.alertSection}>
-                    <View style={[styles.alertBadge, { 
-                      backgroundColor: alertBgColor,
-                      borderColor: alertBorderColor,
-                    }]}>
-                      <IconSymbol
-                        ios_icon_name="circle.fill"
-                        android_material_icon_name={alertIcon}
-                        size={16}
-                        color={alertColor}
-                        style={styles.alertBadgeIcon}
-                      />
-                      <Text style={[styles.alertBadgeText, { color: alertColor }]}>
-                        {alertLabel}
-                      </Text>
-                    </View>
-                    
-                    <IconSymbol
-                      ios_icon_name="chevron.right"
-                      android_material_icon_name="chevron-right"
-                      size={20}
-                      color={colors.iconLight}
-                      style={styles.chevron}
-                    />
-                  </View>
+                  {/* Chevron */}
+                  <IconSymbol
+                    ios_icon_name="chevron.right"
+                    android_material_icon_name="chevron-right"
+                    size={18}
+                    color={colors.iconLight}
+                    style={styles.chevron}
+                  />
                 </View>
               </TouchableOpacity>
             );
@@ -176,145 +170,135 @@ const styles = StyleSheet.create({
   header: {
     backgroundColor: colors.backgroundAlt,
     paddingHorizontal: spacing.xl,
-    paddingTop: spacing.lg,
-    paddingBottom: spacing.lg,
+    paddingTop: spacing.md,
+    paddingBottom: spacing.md,
     borderBottomWidth: 1,
     borderBottomColor: colors.borderLight,
-  },
-  headerContent: {
-    gap: spacing.xs,
-  },
-  headerTitle: {
-    fontSize: typography.h2,
-    fontWeight: typography.bold,
-    color: colors.text,
-    letterSpacing: -0.5,
-  },
-  headerSubtitle: {
-    fontSize: typography.bodySmall,
-    fontWeight: typography.regular,
-    color: colors.textSecondary,
-  },
-  disclaimerBanner: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: colors.alertYellowBg,
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.md,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.alertYellowBorder,
+    justifyContent: 'space-between',
+  },
+  headerTitle: {
+    fontSize: typography.h3,
+    fontWeight: typography.semibold,
+    color: colors.text,
+    letterSpacing: -0.3,
+  },
+  disclaimerCompact: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
   },
   disclaimerIcon: {
-    marginRight: spacing.sm,
+    opacity: 0.7,
   },
   disclaimerText: {
-    flex: 1,
-    fontSize: typography.caption,
-    fontWeight: typography.medium,
-    color: colors.text,
+    fontSize: typography.tiny,
+    fontWeight: typography.regular,
+    color: colors.textLight,
   },
   scrollView: {
     flex: 1,
   },
   scrollContent: {
-    paddingTop: spacing.lg,
+    paddingTop: spacing.xl,
   },
   listHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: spacing.xl,
-    marginBottom: spacing.md,
+    marginBottom: spacing.lg,
   },
   listTitle: {
     fontSize: typography.h4,
     fontWeight: typography.semibold,
     color: colors.text,
+    letterSpacing: -0.2,
   },
-  patientCount: {
-    fontSize: typography.bodySmall,
-    fontWeight: typography.semibold,
-    color: colors.textLight,
+  countBadge: {
     backgroundColor: colors.borderLight,
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.xs,
     borderRadius: borderRadius.full,
+    minWidth: 32,
+    alignItems: 'center',
+  },
+  patientCount: {
+    fontSize: typography.caption,
+    fontWeight: typography.semibold,
+    color: colors.textSecondary,
   },
   patientCard: {
     backgroundColor: colors.card,
-    marginHorizontal: spacing.lg,
-    marginBottom: spacing.md,
+    marginHorizontal: spacing.xl,
+    marginBottom: spacing.lg,
     borderRadius: borderRadius.lg,
     borderWidth: 1,
     borderColor: colors.border,
+    overflow: 'hidden',
     ...shadows.sm,
+  },
+  alertBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.sm,
+    gap: spacing.sm,
+    borderLeftWidth: 4,
+  },
+  alertLabel: {
+    fontSize: typography.caption,
+    fontWeight: typography.bold,
+    letterSpacing: 0.3,
+    textTransform: 'uppercase',
   },
   cardContent: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    padding: spacing.lg,
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.md,
+    paddingBottom: spacing.lg,
   },
   patientInfo: {
     flex: 1,
-    gap: spacing.xs,
+    gap: spacing.sm,
   },
   patientName: {
-    fontSize: typography.h4,
-    fontWeight: typography.semibold,
+    fontSize: typography.h3,
+    fontWeight: typography.bold,
     color: colors.text,
-    marginBottom: 2,
-  },
-  procedureType: {
-    fontSize: typography.bodySmall,
-    fontWeight: typography.regular,
-    color: colors.textSecondary,
-    lineHeight: 20,
+    letterSpacing: -0.3,
+    lineHeight: 26,
   },
   metaRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginTop: spacing.xs,
   },
   podBadge: {
     backgroundColor: colors.borderLight,
-    paddingHorizontal: spacing.sm,
+    paddingHorizontal: spacing.md,
     paddingVertical: spacing.xs,
     borderRadius: borderRadius.sm,
   },
   podText: {
     fontSize: typography.tiny,
-    fontWeight: typography.semibold,
+    fontWeight: typography.bold,
     color: colors.textSecondary,
-    letterSpacing: 0.3,
+    letterSpacing: 0.5,
   },
-  alertSection: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.sm,
-    marginLeft: spacing.md,
-  },
-  alertBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
-    borderRadius: borderRadius.md,
-    borderWidth: 1,
-    gap: spacing.xs,
-  },
-  alertBadgeIcon: {
-    marginTop: 1,
-  },
-  alertBadgeText: {
+  procedureType: {
     fontSize: typography.caption,
-    fontWeight: typography.semibold,
-    letterSpacing: 0.2,
+    fontWeight: typography.regular,
+    color: colors.textLight,
+    lineHeight: 18,
   },
   chevron: {
-    opacity: 0.4,
+    opacity: 0.3,
+    marginLeft: spacing.md,
   },
   bottomSpacer: {
-    height: spacing.xxxl,
+    height: spacing.xxxxl,
   },
 });

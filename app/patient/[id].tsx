@@ -6,14 +6,18 @@ import {
   StyleSheet,
   ScrollView,
   Platform,
+  TouchableOpacity,
+  TextInput,
+  Modal,
+  KeyboardAvoidingView,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams, Stack } from 'expo-router';
 import { colors, typography, spacing, borderRadius, shadows } from '@/styles/commonStyles';
 import { IconSymbol } from '@/components/IconSymbol';
 import { mockPatients, mockAlerts } from '@/data/mockPatients';
-import { Patient, Alert, AlertStatus, TrendData } from '@/types/patient';
-import { calculateTrends, generateAlerts } from '@/utils/alertLogic';
+import { Patient, Alert, AlertStatus, TrendData, VitalSigns, LabValues } from '@/types/patient';
+import { calculateTrends, generateAlerts, calculateAlertStatus } from '@/utils/alertLogic';
 
 export default function PatientDetailScreen() {
   console.log('PatientDetailScreen rendered');
@@ -22,18 +26,93 @@ export default function PatientDetailScreen() {
   const [patient, setPatient] = useState<Patient | null>(null);
   const [alerts, setAlerts] = useState<Alert[]>([]);
   const [trends, setTrends] = useState<TrendData[]>([]);
+  const [editModalVisible, setEditModalVisible] = useState(false);
+  const [editType, setEditType] = useState<'vitals' | 'labs'>('vitals');
+  
+  // Edit form state
+  const [editHeartRate, setEditHeartRate] = useState('');
+  const [editSystolicBP, setEditSystolicBP] = useState('');
+  const [editDiastolicBP, setEditDiastolicBP] = useState('');
+  const [editTemperature, setEditTemperature] = useState('');
+  const [editUrineOutput, setEditUrineOutput] = useState('');
+  const [editWBC, setEditWBC] = useState('');
+  const [editHemoglobin, setEditHemoglobin] = useState('');
+  const [editCreatinine, setEditCreatinine] = useState('');
+  const [editLactate, setEditLactate] = useState('');
 
   useEffect(() => {
     console.log('Loading patient data for ID:', id);
     const foundPatient = mockPatients.find(p => p.id === id);
     if (foundPatient) {
       setPatient(foundPatient);
-      const patientTrends = calculateTrends(foundPatient);
-      setTrends(patientTrends);
-      const patientAlerts = generateAlerts(foundPatient);
-      setAlerts(patientAlerts);
+      updatePatientAnalysis(foundPatient);
     }
   }, [id]);
+
+  const updatePatientAnalysis = (updatedPatient: Patient) => {
+    const patientTrends = calculateTrends(updatedPatient);
+    setTrends(patientTrends);
+    const patientAlerts = generateAlerts(updatedPatient);
+    setAlerts(patientAlerts);
+    const newAlertStatus = calculateAlertStatus(updatedPatient);
+    updatedPatient.alertStatus = newAlertStatus;
+  };
+
+  const openEditModal = (type: 'vitals' | 'labs') => {
+    console.log('User tapped edit button for:', type);
+    if (!patient) return;
+    
+    setEditType(type);
+    const latestVitals = patient.vitals[patient.vitals.length - 1];
+    const latestLabs = patient.labs[patient.labs.length - 1];
+    
+    if (type === 'vitals') {
+      setEditHeartRate(latestVitals.heartRate.toString());
+      setEditSystolicBP(latestVitals.systolicBP.toString());
+      setEditDiastolicBP(latestVitals.diastolicBP.toString());
+      setEditTemperature(latestVitals.temperature.toFixed(1));
+      setEditUrineOutput(latestVitals.urineOutput?.toString() || '');
+    } else {
+      setEditWBC(latestLabs.wbc.toFixed(1));
+      setEditHemoglobin(latestLabs.hemoglobin.toFixed(1));
+      setEditCreatinine(latestLabs.creatinine.toFixed(1));
+      setEditLactate(latestLabs.lactate?.toFixed(1) || '');
+    }
+    
+    setEditModalVisible(true);
+  };
+
+  const saveEdits = () => {
+    console.log('User saved edits for:', editType);
+    if (!patient) return;
+    
+    const updatedPatient = { ...patient };
+    
+    if (editType === 'vitals') {
+      const newVitals: VitalSigns = {
+        heartRate: parseFloat(editHeartRate) || 0,
+        systolicBP: parseFloat(editSystolicBP) || 0,
+        diastolicBP: parseFloat(editDiastolicBP) || 0,
+        temperature: parseFloat(editTemperature) || 0,
+        urineOutput: editUrineOutput ? parseFloat(editUrineOutput) : undefined,
+        timestamp: new Date(),
+      };
+      updatedPatient.vitals = [...updatedPatient.vitals, newVitals];
+    } else {
+      const newLabs: LabValues = {
+        wbc: parseFloat(editWBC) || 0,
+        hemoglobin: parseFloat(editHemoglobin) || 0,
+        creatinine: parseFloat(editCreatinine) || 0,
+        lactate: editLactate ? parseFloat(editLactate) : undefined,
+        timestamp: new Date(),
+      };
+      updatedPatient.labs = [...updatedPatient.labs, newLabs];
+    }
+    
+    setPatient(updatedPatient);
+    updatePatientAnalysis(updatedPatient);
+    setEditModalVisible(false);
+  };
 
   if (!patient) {
     return (
@@ -121,8 +200,8 @@ export default function PatientDetailScreen() {
           <View style={styles.headerTop}>
             <View style={styles.headerInfo}>
               <Text style={styles.patientName}>{patient.name}</Text>
-              <Text style={styles.procedureType}>{patient.procedureType}</Text>
               <Text style={styles.podText}>{podText}</Text>
+              <Text style={styles.procedureType}>{patient.procedureType}</Text>
             </View>
             <View style={[styles.statusBadge, { 
               backgroundColor: alertBgColor,
@@ -142,7 +221,7 @@ export default function PatientDetailScreen() {
               <IconSymbol
                 ios_icon_name="exclamationmark.triangle.fill"
                 android_material_icon_name="warning"
-                size={20}
+                size={18}
                 color={colors.warning}
                 style={styles.sectionIcon}
               />
@@ -203,69 +282,51 @@ export default function PatientDetailScreen() {
 
         {/* Vital Signs Section */}
         <View style={styles.section}>
-          <View style={styles.sectionHeader}>
-            <IconSymbol
-              ios_icon_name="heart.fill"
-              android_material_icon_name="favorite"
-              size={20}
-              color={colors.iconPrimary}
-              style={styles.sectionIcon}
-            />
-            <Text style={styles.sectionTitle}>Vital Signs</Text>
+          <View style={styles.sectionHeaderRow}>
+            <View style={styles.sectionHeader}>
+              <IconSymbol
+                ios_icon_name="heart.fill"
+                android_material_icon_name="favorite"
+                size={18}
+                color={colors.iconPrimary}
+                style={styles.sectionIcon}
+              />
+              <Text style={styles.sectionTitle}>Vital Signs</Text>
+            </View>
+            <TouchableOpacity 
+              style={styles.editButton}
+              onPress={() => openEditModal('vitals')}
+            >
+              <IconSymbol
+                ios_icon_name="pencil"
+                android_material_icon_name="edit"
+                size={16}
+                color={colors.primary}
+              />
+              <Text style={styles.editButtonText}>Edit</Text>
+            </TouchableOpacity>
           </View>
 
           <View style={styles.dataGrid}>
             <View style={styles.dataCard}>
-              <View style={styles.dataIconContainer}>
-                <IconSymbol
-                  ios_icon_name="heart.fill"
-                  android_material_icon_name="favorite"
-                  size={18}
-                  color={colors.iconSecondary}
-                />
-              </View>
               <Text style={styles.dataLabel}>Heart Rate</Text>
               <Text style={styles.dataValue}>{hrText}</Text>
               <Text style={styles.dataUnit}>bpm</Text>
             </View>
 
             <View style={styles.dataCard}>
-              <View style={styles.dataIconContainer}>
-                <IconSymbol
-                  ios_icon_name="waveform.path.ecg"
-                  android_material_icon_name="show-chart"
-                  size={18}
-                  color={colors.iconSecondary}
-                />
-              </View>
               <Text style={styles.dataLabel}>Blood Pressure</Text>
               <Text style={styles.dataValue}>{bpText}</Text>
               <Text style={styles.dataUnit}>mmHg</Text>
             </View>
 
             <View style={styles.dataCard}>
-              <View style={styles.dataIconContainer}>
-                <IconSymbol
-                  ios_icon_name="thermometer"
-                  android_material_icon_name="thermostat"
-                  size={18}
-                  color={colors.iconSecondary}
-                />
-              </View>
               <Text style={styles.dataLabel}>Temperature</Text>
               <Text style={styles.dataValue}>{tempText}</Text>
               <Text style={styles.dataUnit}>°C</Text>
             </View>
 
             <View style={styles.dataCard}>
-              <View style={styles.dataIconContainer}>
-                <IconSymbol
-                  ios_icon_name="drop.fill"
-                  android_material_icon_name="water-drop"
-                  size={18}
-                  color={colors.iconSecondary}
-                />
-              </View>
               <Text style={styles.dataLabel}>Urine Output</Text>
               <Text style={styles.dataValue}>{uoText}</Text>
               <Text style={styles.dataUnit}>ml/hr</Text>
@@ -275,15 +336,29 @@ export default function PatientDetailScreen() {
 
         {/* Laboratory Values Section */}
         <View style={styles.section}>
-          <View style={styles.sectionHeader}>
-            <IconSymbol
-              ios_icon_name="flask.fill"
-              android_material_icon_name="science"
-              size={20}
-              color={colors.iconPrimary}
-              style={styles.sectionIcon}
-            />
-            <Text style={styles.sectionTitle}>Laboratory Values</Text>
+          <View style={styles.sectionHeaderRow}>
+            <View style={styles.sectionHeader}>
+              <IconSymbol
+                ios_icon_name="flask.fill"
+                android_material_icon_name="science"
+                size={18}
+                color={colors.iconPrimary}
+                style={styles.sectionIcon}
+              />
+              <Text style={styles.sectionTitle}>Laboratory Values</Text>
+            </View>
+            <TouchableOpacity 
+              style={styles.editButton}
+              onPress={() => openEditModal('labs')}
+            >
+              <IconSymbol
+                ios_icon_name="pencil"
+                android_material_icon_name="edit"
+                size={16}
+                color={colors.primary}
+              />
+              <Text style={styles.editButtonText}>Edit</Text>
+            </TouchableOpacity>
           </View>
 
           <View style={styles.dataGrid}>
@@ -314,68 +389,221 @@ export default function PatientDetailScreen() {
         </View>
 
         {/* Trends Section */}
-        <View style={styles.section}>
-          <View style={styles.sectionHeader}>
-            <IconSymbol
-              ios_icon_name="chart.line.uptrend.xyaxis"
-              android_material_icon_name="trending-up"
-              size={20}
-              color={colors.iconPrimary}
-              style={styles.sectionIcon}
-            />
-            <Text style={styles.sectionTitle}>Trends</Text>
-          </View>
+        {trends.length > 0 && (
+          <View style={styles.section}>
+            <View style={styles.sectionHeader}>
+              <IconSymbol
+                ios_icon_name="chart.line.uptrend.xyaxis"
+                android_material_icon_name="trending-up"
+                size={18}
+                color={colors.iconPrimary}
+                style={styles.sectionIcon}
+              />
+              <Text style={styles.sectionTitle}>Trends</Text>
+            </View>
 
-          {trends.map((trendData, index) => {
-            const trendIcon = getTrendIcon(trendData.trend);
-            const trendColor = getTrendColor(trendData);
-            const firstValue = trendData.values[0].toFixed(1);
-            const lastValue = trendData.values[trendData.values.length - 1].toFixed(1);
-            const trendText = `${firstValue} → ${lastValue}`;
+            {trends.map((trendData, index) => {
+              const trendIcon = getTrendIcon(trendData.trend);
+              const trendColor = getTrendColor(trendData);
+              const firstValue = trendData.values[0].toFixed(1);
+              const lastValue = trendData.values[trendData.values.length - 1].toFixed(1);
+              const trendText = `${firstValue} → ${lastValue}`;
 
-            return (
-              <View key={index} style={styles.trendCard}>
-                <View style={styles.trendRow}>
-                  <Text style={styles.trendLabel}>{trendData.label}</Text>
-                  <View style={styles.trendValueContainer}>
-                    <IconSymbol
-                      ios_icon_name="arrow.up"
-                      android_material_icon_name={trendIcon}
-                      size={14}
-                      color={trendColor}
-                      style={styles.trendIcon}
-                    />
-                    <Text style={[styles.trendValue, { color: trendColor }]}>
-                      {trendText}
-                    </Text>
+              return (
+                <View key={index} style={styles.trendCard}>
+                  <View style={styles.trendRow}>
+                    <Text style={styles.trendLabel}>{trendData.label}</Text>
+                    <View style={styles.trendValueContainer}>
+                      <IconSymbol
+                        ios_icon_name="arrow.up"
+                        android_material_icon_name={trendIcon}
+                        size={14}
+                        color={trendColor}
+                        style={styles.trendIcon}
+                      />
+                      <Text style={[styles.trendValue, { color: trendColor }]}>
+                        {trendText}
+                      </Text>
+                    </View>
                   </View>
+                  {trendData.concerning && (
+                    <View style={styles.concerningBadge}>
+                      <Text style={styles.concerningText}>Concerning trend</Text>
+                    </View>
+                  )}
                 </View>
-                {trendData.concerning && (
-                  <View style={styles.concerningBadge}>
-                    <Text style={styles.concerningText}>Concerning trend</Text>
-                  </View>
-                )}
-              </View>
-            );
-          })}
-        </View>
+              );
+            })}
+          </View>
+        )}
 
         {/* Disclaimer */}
         <View style={styles.disclaimerCard}>
           <IconSymbol
-            ios_icon_name="info.circle.fill"
+            ios_icon_name="info.circle"
             android_material_icon_name="info"
-            size={18}
-            color={colors.info}
+            size={16}
+            color={colors.textLight}
             style={styles.disclaimerIcon}
           />
           <Text style={styles.disclaimerText}>
-            This tool provides educational pattern recognition only. All clinical decisions must be made by qualified healthcare professionals based on complete patient assessment.
+            Educational pattern recognition only. Clinical decisions must be made by qualified healthcare professionals.
           </Text>
         </View>
 
         <View style={styles.bottomSpacer} />
       </ScrollView>
+
+      {/* Edit Modal */}
+      <Modal
+        visible={editModalVisible}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => setEditModalVisible(false)}
+      >
+        <KeyboardAvoidingView 
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          style={styles.modalOverlay}
+        >
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>
+                {editType === 'vitals' ? 'Edit Vital Signs' : 'Edit Laboratory Values'}
+              </Text>
+              <TouchableOpacity onPress={() => setEditModalVisible(false)}>
+                <IconSymbol
+                  ios_icon_name="xmark"
+                  android_material_icon_name="close"
+                  size={24}
+                  color={colors.textSecondary}
+                />
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView style={styles.modalScroll}>
+              {editType === 'vitals' ? (
+                <>
+                  <View style={styles.inputGroup}>
+                    <Text style={styles.inputLabel}>Heart Rate (bpm)</Text>
+                    <TextInput
+                      style={styles.input}
+                      value={editHeartRate}
+                      onChangeText={setEditHeartRate}
+                      keyboardType="numeric"
+                      placeholder="e.g., 75"
+                    />
+                  </View>
+
+                  <View style={styles.inputGroup}>
+                    <Text style={styles.inputLabel}>Systolic BP (mmHg)</Text>
+                    <TextInput
+                      style={styles.input}
+                      value={editSystolicBP}
+                      onChangeText={setEditSystolicBP}
+                      keyboardType="numeric"
+                      placeholder="e.g., 120"
+                    />
+                  </View>
+
+                  <View style={styles.inputGroup}>
+                    <Text style={styles.inputLabel}>Diastolic BP (mmHg)</Text>
+                    <TextInput
+                      style={styles.input}
+                      value={editDiastolicBP}
+                      onChangeText={setEditDiastolicBP}
+                      keyboardType="numeric"
+                      placeholder="e.g., 80"
+                    />
+                  </View>
+
+                  <View style={styles.inputGroup}>
+                    <Text style={styles.inputLabel}>Temperature (°C)</Text>
+                    <TextInput
+                      style={styles.input}
+                      value={editTemperature}
+                      onChangeText={setEditTemperature}
+                      keyboardType="decimal-pad"
+                      placeholder="e.g., 37.2"
+                    />
+                  </View>
+
+                  <View style={styles.inputGroup}>
+                    <Text style={styles.inputLabel}>Urine Output (ml/hr)</Text>
+                    <TextInput
+                      style={styles.input}
+                      value={editUrineOutput}
+                      onChangeText={setEditUrineOutput}
+                      keyboardType="numeric"
+                      placeholder="e.g., 50"
+                    />
+                  </View>
+                </>
+              ) : (
+                <>
+                  <View style={styles.inputGroup}>
+                    <Text style={styles.inputLabel}>WBC (K/μL)</Text>
+                    <TextInput
+                      style={styles.input}
+                      value={editWBC}
+                      onChangeText={setEditWBC}
+                      keyboardType="decimal-pad"
+                      placeholder="e.g., 9.5"
+                    />
+                  </View>
+
+                  <View style={styles.inputGroup}>
+                    <Text style={styles.inputLabel}>Hemoglobin (g/dL)</Text>
+                    <TextInput
+                      style={styles.input}
+                      value={editHemoglobin}
+                      onChangeText={setEditHemoglobin}
+                      keyboardType="decimal-pad"
+                      placeholder="e.g., 13.2"
+                    />
+                  </View>
+
+                  <View style={styles.inputGroup}>
+                    <Text style={styles.inputLabel}>Creatinine (mg/dL)</Text>
+                    <TextInput
+                      style={styles.input}
+                      value={editCreatinine}
+                      onChangeText={setEditCreatinine}
+                      keyboardType="decimal-pad"
+                      placeholder="e.g., 0.9"
+                    />
+                  </View>
+
+                  <View style={styles.inputGroup}>
+                    <Text style={styles.inputLabel}>Lactate (mmol/L)</Text>
+                    <TextInput
+                      style={styles.input}
+                      value={editLactate}
+                      onChangeText={setEditLactate}
+                      keyboardType="decimal-pad"
+                      placeholder="e.g., 1.2"
+                    />
+                  </View>
+                </>
+              )}
+            </ScrollView>
+
+            <View style={styles.modalActions}>
+              <TouchableOpacity 
+                style={styles.cancelButton}
+                onPress={() => setEditModalVisible(false)}
+              >
+                <Text style={styles.cancelButtonText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity 
+                style={styles.saveButton}
+                onPress={saveEdits}
+              >
+                <Text style={styles.saveButtonText}>Save</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -390,7 +618,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   scrollContent: {
-    paddingBottom: spacing.xxxl,
+    paddingBottom: spacing.xxxxl,
   },
   loadingContainer: {
     flex: 1,
@@ -421,17 +649,19 @@ const styles = StyleSheet.create({
     fontSize: typography.h2,
     fontWeight: typography.bold,
     color: colors.text,
-  },
-  procedureType: {
-    fontSize: typography.body,
-    fontWeight: typography.regular,
-    color: colors.textSecondary,
-    lineHeight: 22,
+    letterSpacing: -0.3,
+    lineHeight: 28,
   },
   podText: {
     fontSize: typography.bodySmall,
     fontWeight: typography.medium,
+    color: colors.textSecondary,
+  },
+  procedureType: {
+    fontSize: typography.caption,
+    fontWeight: typography.regular,
     color: colors.textLight,
+    lineHeight: 18,
   },
   statusBadge: {
     paddingHorizontal: spacing.md,
@@ -441,18 +671,23 @@ const styles = StyleSheet.create({
     marginLeft: spacing.md,
   },
   statusText: {
-    fontSize: typography.caption,
+    fontSize: typography.tiny,
     fontWeight: typography.bold,
     letterSpacing: 0.5,
   },
   section: {
     paddingHorizontal: spacing.xl,
-    paddingTop: spacing.xl,
+    paddingTop: spacing.xxl,
+  },
+  sectionHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: spacing.lg,
   },
   sectionHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: spacing.lg,
   },
   sectionIcon: {
     marginRight: spacing.sm,
@@ -461,6 +696,21 @@ const styles = StyleSheet.create({
     fontSize: typography.h4,
     fontWeight: typography.semibold,
     color: colors.text,
+    letterSpacing: -0.2,
+  },
+  editButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.xs,
+    borderRadius: borderRadius.sm,
+    backgroundColor: colors.borderLight,
+  },
+  editButtonText: {
+    fontSize: typography.caption,
+    fontWeight: typography.semibold,
+    color: colors.primary,
   },
   alertCard: {
     borderRadius: borderRadius.lg,
@@ -474,6 +724,7 @@ const styles = StyleSheet.create({
   alertTitle: {
     fontSize: typography.h5,
     fontWeight: typography.bold,
+    lineHeight: 22,
   },
   alertDescription: {
     fontSize: typography.bodySmall,
@@ -519,29 +770,21 @@ const styles = StyleSheet.create({
   dataCard: {
     width: '50%',
     paddingHorizontal: spacing.xs,
-    marginBottom: spacing.md,
-  },
-  dataIconContainer: {
-    width: 36,
-    height: 36,
-    borderRadius: borderRadius.md,
-    backgroundColor: colors.borderLight,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: spacing.sm,
+    marginBottom: spacing.lg,
   },
   dataLabel: {
     fontSize: typography.caption,
     fontWeight: typography.medium,
     color: colors.textSecondary,
-    marginBottom: spacing.xs,
+    marginBottom: spacing.sm,
   },
   dataValue: {
-    fontSize: 28,
+    fontSize: 32,
     fontWeight: typography.bold,
     color: colors.text,
     marginBottom: 2,
     letterSpacing: -0.5,
+    lineHeight: 38,
   },
   dataUnit: {
     fontSize: typography.tiny,
@@ -592,26 +835,106 @@ const styles = StyleSheet.create({
   disclaimerCard: {
     flexDirection: 'row',
     alignItems: 'flex-start',
-    backgroundColor: colors.alertYellowBg,
+    backgroundColor: colors.borderLight,
     marginHorizontal: spacing.xl,
-    marginTop: spacing.xl,
+    marginTop: spacing.xxl,
     padding: spacing.lg,
-    borderRadius: borderRadius.lg,
-    borderWidth: 1,
-    borderColor: colors.alertYellowBorder,
+    borderRadius: borderRadius.md,
   },
   disclaimerIcon: {
     marginRight: spacing.md,
     marginTop: 2,
+    opacity: 0.7,
   },
   disclaimerText: {
     flex: 1,
     fontSize: typography.caption,
     fontWeight: typography.regular,
-    color: colors.text,
+    color: colors.textSecondary,
     lineHeight: 18,
   },
   bottomSpacer: {
-    height: spacing.xxxl,
+    height: spacing.xxxxl,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'flex-end',
+  },
+  modalContent: {
+    backgroundColor: colors.backgroundAlt,
+    borderTopLeftRadius: borderRadius.xl,
+    borderTopRightRadius: borderRadius.xl,
+    maxHeight: '80%',
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: spacing.xl,
+    paddingTop: spacing.xl,
+    paddingBottom: spacing.lg,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.borderLight,
+  },
+  modalTitle: {
+    fontSize: typography.h3,
+    fontWeight: typography.bold,
+    color: colors.text,
+  },
+  modalScroll: {
+    paddingHorizontal: spacing.xl,
+    paddingTop: spacing.lg,
+  },
+  inputGroup: {
+    marginBottom: spacing.lg,
+  },
+  inputLabel: {
+    fontSize: typography.bodySmall,
+    fontWeight: typography.semibold,
+    color: colors.text,
+    marginBottom: spacing.sm,
+  },
+  input: {
+    backgroundColor: colors.background,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: borderRadius.md,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
+    fontSize: typography.body,
+    color: colors.text,
+  },
+  modalActions: {
+    flexDirection: 'row',
+    gap: spacing.md,
+    paddingHorizontal: spacing.xl,
+    paddingVertical: spacing.xl,
+    borderTopWidth: 1,
+    borderTopColor: colors.borderLight,
+  },
+  cancelButton: {
+    flex: 1,
+    paddingVertical: spacing.lg,
+    borderRadius: borderRadius.md,
+    backgroundColor: colors.borderLight,
+    alignItems: 'center',
+  },
+  cancelButtonText: {
+    fontSize: typography.body,
+    fontWeight: typography.semibold,
+    color: colors.textSecondary,
+  },
+  saveButton: {
+    flex: 1,
+    paddingVertical: spacing.lg,
+    borderRadius: borderRadius.md,
+    backgroundColor: colors.primary,
+    alignItems: 'center',
+  },
+  saveButtonText: {
+    fontSize: typography.body,
+    fontWeight: typography.semibold,
+    color: '#FFFFFF',
   },
 });

@@ -53,16 +53,16 @@ export const colors = {
 };
 
 export const typography = {
-  // Font sizes - clear hierarchy
-  h1: 28,
-  h2: 24,
-  h3: 20,
-  h4: 18,
+  // Font sizes - clear hierarchy, refined for clinical use
+  h1: 26,
+  h2: 20,
+  h3: 18,
+  h4: 17,
   h5: 16,
   body: 15,
   bodySmall: 14,
   caption: 13,
-  tiny: 12,
+  tiny: 11,
   
   // Font weights
   light: '300' as const,
@@ -80,6 +80,7 @@ export const spacing = {
   xl: 20,
   xxl: 24,
   xxxl: 32,
+  xxxxl: 48,
 };
 
 export const borderRadius = {
