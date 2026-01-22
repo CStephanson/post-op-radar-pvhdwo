@@ -1,0 +1,13 @@
+{
+  "version": "7",
+  "dialect": "postgresql",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "7",
+      "when": 1769123193036,
+      "tag": "20260122230633_harsh_agent_brand",
+      "breakpoints": true
+    }
+  ]
+}
