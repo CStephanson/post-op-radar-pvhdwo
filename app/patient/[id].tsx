@@ -15,7 +15,6 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams, Stack } from 'expo-router';
 import { colors, typography, spacing, borderRadius, shadows } from '@/styles/commonStyles';
 import { IconSymbol } from '@/components/IconSymbol';
-import { mockPatients, mockAlerts } from '@/data/mockPatients';
 import { Patient, Alert, AlertStatus, TrendData, VitalSigns, LabValues } from '@/types/patient';
 import { calculateTrends, generateAlerts, calculateAlertStatus } from '@/utils/alertLogic';
 
@@ -41,13 +40,37 @@ export default function PatientDetailScreen() {
   const [editLactate, setEditLactate] = useState('');
 
   useEffect(() => {
-    console.log('Loading patient data for ID:', id);
-    const foundPatient = mockPatients.find(p => p.id === id);
-    if (foundPatient) {
-      setPatient(foundPatient);
-      updatePatientAnalysis(foundPatient);
-    }
+    loadPatientData();
   }, [id]);
+
+  const loadPatientData = async () => {
+    console.log('Loading patient data for ID:', id);
+    try {
+      const { authenticatedGet } = await import('@/utils/api');
+      const patientData = await authenticatedGet<any>(`/api/patients/${id}`);
+      
+      // Convert date strings to Date objects
+      const patientWithDates = {
+        ...patientData,
+        operationDateTime: patientData.operationDateTime ? new Date(patientData.operationDateTime) : undefined,
+        createdAt: new Date(patientData.createdAt),
+        updatedAt: new Date(patientData.updatedAt),
+        vitals: patientData.vitalSigns?.map((v: any) => ({
+          ...v,
+          timestamp: new Date(v.timestamp),
+        })) || [],
+        labs: patientData.labValues?.map((l: any) => ({
+          ...l,
+          timestamp: new Date(l.timestamp),
+        })) || [],
+      };
+      
+      setPatient(patientWithDates);
+      updatePatientAnalysis(patientWithDates);
+    } catch (error: any) {
+      console.error('Error loading patient data:', error);
+    }
+  };
 
   const updatePatientAnalysis = (updatedPatient: Patient) => {
     const patientTrends = calculateTrends(updatedPatient);
@@ -63,55 +86,93 @@ export default function PatientDetailScreen() {
     if (!patient) return;
     
     setEditType(type);
-    const latestVitals = patient.vitals[patient.vitals.length - 1];
-    const latestLabs = patient.labs[patient.labs.length - 1];
     
     if (type === 'vitals') {
-      setEditHeartRate(latestVitals.heartRate.toString());
-      setEditSystolicBP(latestVitals.systolicBP.toString());
-      setEditDiastolicBP(latestVitals.diastolicBP.toString());
-      setEditTemperature(latestVitals.temperature.toFixed(1));
-      setEditUrineOutput(latestVitals.urineOutput?.toString() || '');
+      const latestVitals = patient.vitals && patient.vitals.length > 0 
+        ? patient.vitals[patient.vitals.length - 1]
+        : null;
+      
+      setEditHeartRate(latestVitals?.heartRate.toString() || '');
+      setEditSystolicBP(latestVitals?.systolicBP.toString() || '');
+      setEditDiastolicBP(latestVitals?.diastolicBP.toString() || '');
+      setEditTemperature(latestVitals?.temperature.toFixed(1) || '');
+      setEditUrineOutput(latestVitals?.urineOutput?.toString() || '');
     } else {
-      setEditWBC(latestLabs.wbc.toFixed(1));
-      setEditHemoglobin(latestLabs.hemoglobin.toFixed(1));
-      setEditCreatinine(latestLabs.creatinine.toFixed(1));
-      setEditLactate(latestLabs.lactate?.toFixed(1) || '');
+      const latestLabs = patient.labs && patient.labs.length > 0
+        ? patient.labs[patient.labs.length - 1]
+        : null;
+      
+      setEditWBC(latestLabs?.wbc.toFixed(1) || '');
+      setEditHemoglobin(latestLabs?.hemoglobin.toFixed(1) || '');
+      setEditCreatinine(latestLabs?.creatinine.toFixed(1) || '');
+      setEditLactate(latestLabs?.lactate?.toFixed(1) || '');
     }
     
     setEditModalVisible(true);
   };
 
-  const saveEdits = () => {
+  const saveEdits = async () => {
     console.log('User saved edits for:', editType);
     if (!patient) return;
     
-    const updatedPatient = { ...patient };
-    
-    if (editType === 'vitals') {
-      const newVitals: VitalSigns = {
-        heartRate: parseFloat(editHeartRate) || 0,
-        systolicBP: parseFloat(editSystolicBP) || 0,
-        diastolicBP: parseFloat(editDiastolicBP) || 0,
-        temperature: parseFloat(editTemperature) || 0,
-        urineOutput: editUrineOutput ? parseFloat(editUrineOutput) : undefined,
-        timestamp: new Date(),
-      };
-      updatedPatient.vitals = [...updatedPatient.vitals, newVitals];
-    } else {
-      const newLabs: LabValues = {
-        wbc: parseFloat(editWBC) || 0,
-        hemoglobin: parseFloat(editHemoglobin) || 0,
-        creatinine: parseFloat(editCreatinine) || 0,
-        lactate: editLactate ? parseFloat(editLactate) : undefined,
-        timestamp: new Date(),
-      };
-      updatedPatient.labs = [...updatedPatient.labs, newLabs];
+    try {
+      const { authenticatedPost } = await import('@/utils/api');
+      
+      if (editType === 'vitals') {
+        const vitalsData = {
+          heartRate: parseFloat(editHeartRate) || undefined,
+          systolicBP: parseFloat(editSystolicBP) || undefined,
+          diastolicBP: parseFloat(editDiastolicBP) || undefined,
+          temperature: editTemperature || undefined,
+          urineOutput: editUrineOutput || undefined,
+          timestamp: new Date().toISOString(),
+        };
+        
+        console.log('Saving vitals:', vitalsData);
+        await authenticatedPost(`/api/patients/${patient.id}/vitals`, vitalsData);
+        
+        // Add to local state
+        const newVitals: VitalSigns = {
+          heartRate: parseFloat(editHeartRate) || 0,
+          systolicBP: parseFloat(editSystolicBP) || 0,
+          diastolicBP: parseFloat(editDiastolicBP) || 0,
+          temperature: parseFloat(editTemperature) || 0,
+          urineOutput: editUrineOutput ? parseFloat(editUrineOutput) : undefined,
+          timestamp: new Date(),
+        };
+        const updatedPatient = { ...patient, vitals: [...patient.vitals, newVitals] };
+        setPatient(updatedPatient);
+        updatePatientAnalysis(updatedPatient);
+      } else {
+        const labsData = {
+          wbc: editWBC || undefined,
+          hemoglobin: editHemoglobin || undefined,
+          creatinine: editCreatinine || undefined,
+          lactate: editLactate || undefined,
+          timestamp: new Date().toISOString(),
+        };
+        
+        console.log('Saving labs:', labsData);
+        await authenticatedPost(`/api/patients/${patient.id}/labs`, labsData);
+        
+        // Add to local state
+        const newLabs: LabValues = {
+          wbc: parseFloat(editWBC) || 0,
+          hemoglobin: parseFloat(editHemoglobin) || 0,
+          creatinine: parseFloat(editCreatinine) || 0,
+          lactate: editLactate ? parseFloat(editLactate) : undefined,
+          timestamp: new Date(),
+        };
+        const updatedPatient = { ...patient, labs: [...patient.labs, newLabs] };
+        setPatient(updatedPatient);
+        updatePatientAnalysis(updatedPatient);
+      }
+      
+      setEditModalVisible(false);
+    } catch (error: any) {
+      console.error('Error saving data:', error);
+      Alert.alert('Error', error.message || 'Failed to save data');
     }
-    
-    setPatient(updatedPatient);
-    updatePatientAnalysis(updatedPatient);
-    setEditModalVisible(false);
   };
 
   if (!patient) {
@@ -131,8 +192,12 @@ export default function PatientDetailScreen() {
     );
   }
 
-  const latestVitals = patient.vitals[patient.vitals.length - 1];
-  const latestLabs = patient.labs[patient.labs.length - 1];
+  const latestVitals = patient.vitals && patient.vitals.length > 0 
+    ? patient.vitals[patient.vitals.length - 1]
+    : { heartRate: 0, systolicBP: 0, diastolicBP: 0, temperature: 0, urineOutput: undefined, timestamp: new Date() };
+  const latestLabs = patient.labs && patient.labs.length > 0
+    ? patient.labs[patient.labs.length - 1]
+    : { wbc: 0, hemoglobin: 0, creatinine: 0, lactate: undefined, timestamp: new Date() };
 
   const getAlertColor = (status: AlertStatus) => {
     if (status === 'green') return colors.alertGreen;
@@ -279,6 +344,35 @@ export default function PatientDetailScreen() {
             })}
           </View>
         )}
+
+        {/* Patient Information Link */}
+        <View style={styles.section}>
+          <TouchableOpacity
+            style={styles.infoLinkCard}
+            onPress={() => router.push(`/patient-info/${id}`)}
+          >
+            <View style={styles.infoLinkLeft}>
+              <IconSymbol
+                ios_icon_name="doc.text.fill"
+                android_material_icon_name="description"
+                size={24}
+                color={colors.primary}
+              />
+              <View style={styles.infoLinkText}>
+                <Text style={styles.infoLinkTitle}>Patient Information</Text>
+                <Text style={styles.infoLinkSubtitle}>
+                  View and edit operation details, diagnoses, and clinical status
+                </Text>
+              </View>
+            </View>
+            <IconSymbol
+              ios_icon_name="chevron.right"
+              android_material_icon_name="chevron-right"
+              size={20}
+              color={colors.iconLight}
+            />
+          </TouchableOpacity>
+        </View>
 
         {/* Vital Signs Section */}
         <View style={styles.section}>
@@ -678,6 +772,38 @@ const styles = StyleSheet.create({
   section: {
     paddingHorizontal: spacing.xl,
     paddingTop: spacing.xxl,
+  },
+  infoLinkCard: {
+    backgroundColor: colors.card,
+    borderRadius: borderRadius.lg,
+    padding: spacing.lg,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    borderWidth: 1,
+    borderColor: colors.border,
+    ...shadows.sm,
+  },
+  infoLinkLeft: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+  },
+  infoLinkText: {
+    flex: 1,
+  },
+  infoLinkTitle: {
+    fontSize: typography.body,
+    fontWeight: typography.bold,
+    color: colors.text,
+    marginBottom: spacing.xs,
+  },
+  infoLinkSubtitle: {
+    fontSize: typography.caption,
+    fontWeight: typography.regular,
+    color: colors.textLight,
+    lineHeight: 18,
   },
   sectionHeaderRow: {
     flexDirection: 'row',

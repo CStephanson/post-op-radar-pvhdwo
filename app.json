@@ -41,7 +41,8 @@
       "typedRoutes": true
     },
     "extra": {
-      "router": {}
+      "router": {},
+      "backendUrl": "https://c7s5pe83nw24vej7xawmm7k86rssuydu.app.specular.dev"
     }
   },
   "scheme": "Post-Op Radar"
