@@ -5,12 +5,11 @@ import {
   Text,
   StyleSheet,
   ScrollView,
-  TouchableOpacity,
   Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams, Stack } from 'expo-router';
-import { colors } from '@/styles/commonStyles';
+import { colors, typography, spacing, borderRadius, shadows } from '@/styles/commonStyles';
 import { IconSymbol } from '@/components/IconSymbol';
 import { mockPatients, mockAlerts } from '@/data/mockPatients';
 import { Patient, Alert, AlertStatus, TrendData } from '@/types/patient';
@@ -68,6 +67,12 @@ export default function PatientDetailScreen() {
     return colors.alertRedBg;
   };
 
+  const getAlertBorderColor = (status: AlertStatus) => {
+    if (status === 'green') return colors.alertGreenBorder;
+    if (status === 'yellow') return colors.alertYellowBorder;
+    return colors.alertRedBorder;
+  };
+
   const getTrendIcon = (trend: 'rising' | 'falling' | 'stable') => {
     if (trend === 'rising') return 'arrow-upward';
     if (trend === 'falling') return 'arrow-downward';
@@ -76,11 +81,13 @@ export default function PatientDetailScreen() {
 
   const getTrendColor = (trendData: TrendData) => {
     if (trendData.concerning) return colors.alertRed;
+    if (trendData.trend === 'stable') return colors.textLight;
     return colors.textSecondary;
   };
 
   const alertColor = getAlertColor(patient.alertStatus);
   const alertBgColor = getAlertBgColor(patient.alertStatus);
+  const alertBorderColor = getAlertBorderColor(patient.alertStatus);
   const podText = `Post-Operative Day ${patient.postOpDay}`;
   const bpText = `${latestVitals.systolicBP}/${latestVitals.diastolicBP}`;
   const hrText = `${latestVitals.heartRate}`;
@@ -109,38 +116,50 @@ export default function PatientDetailScreen() {
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
       >
-        {/* Patient Header */}
-        <View style={styles.patientHeader}>
-          <View style={styles.patientHeaderInfo}>
-            <Text style={styles.patientName}>{patient.name}</Text>
-            <Text style={styles.procedureType}>{patient.procedureType}</Text>
-            <Text style={styles.podText}>{podText}</Text>
-          </View>
-          <View style={[styles.alertBadgeLarge, { backgroundColor: alertBgColor }]}>
-            <Text style={[styles.alertBadgeTextLarge, { color: alertColor }]}>
-              {patient.alertStatus.toUpperCase()}
-            </Text>
+        {/* Patient Header Card */}
+        <View style={styles.headerCard}>
+          <View style={styles.headerTop}>
+            <View style={styles.headerInfo}>
+              <Text style={styles.patientName}>{patient.name}</Text>
+              <Text style={styles.procedureType}>{patient.procedureType}</Text>
+              <Text style={styles.podText}>{podText}</Text>
+            </View>
+            <View style={[styles.statusBadge, { 
+              backgroundColor: alertBgColor,
+              borderColor: alertBorderColor,
+            }]}>
+              <Text style={[styles.statusText, { color: alertColor }]}>
+                {patient.alertStatus.toUpperCase()}
+              </Text>
+            </View>
           </View>
         </View>
 
         {/* Alerts Section */}
         {alerts.length > 0 && (
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Active Alerts</Text>
+            <View style={styles.sectionHeader}>
+              <IconSymbol
+                ios_icon_name="exclamationmark.triangle.fill"
+                android_material_icon_name="warning"
+                size={20}
+                color={colors.warning}
+                style={styles.sectionIcon}
+              />
+              <Text style={styles.sectionTitle}>Active Alerts</Text>
+            </View>
+
             {alerts.map((alert, index) => {
               const severityColor = getAlertColor(alert.severity);
               const severityBgColor = getAlertBgColor(alert.severity);
+              const severityBorderColor = getAlertBorderColor(alert.severity);
 
               return (
-                <View key={index} style={[styles.alertCard, { borderLeftColor: severityColor }]}>
+                <View key={index} style={[styles.alertCard, { 
+                  backgroundColor: severityBgColor,
+                  borderColor: severityBorderColor,
+                }]}>
                   <View style={styles.alertHeader}>
-                    <IconSymbol
-                      ios_icon_name="exclamationmark.triangle.fill"
-                      android_material_icon_name="warning"
-                      size={20}
-                      color={severityColor}
-                      style={styles.alertIcon}
-                    />
                     <Text style={[styles.alertTitle, { color: severityColor }]}>
                       {alert.title}
                     </Text>
@@ -148,9 +167,9 @@ export default function PatientDetailScreen() {
                   <Text style={styles.alertDescription}>{alert.description}</Text>
 
                   <View style={styles.alertSubsection}>
-                    <Text style={styles.alertSubsectionTitle}>Triggered by:</Text>
+                    <Text style={styles.subsectionTitle}>Triggered by:</Text>
                     {alert.triggeredBy.map((trigger, idx) => (
-                      <View key={idx} style={styles.bulletPoint}>
+                      <View key={idx} style={styles.bulletRow}>
                         <Text style={styles.bullet}>•</Text>
                         <Text style={styles.bulletText}>{trigger}</Text>
                       </View>
@@ -158,9 +177,9 @@ export default function PatientDetailScreen() {
                   </View>
 
                   <View style={styles.alertSubsection}>
-                    <Text style={styles.alertSubsectionTitle}>Consider:</Text>
+                    <Text style={styles.subsectionTitle}>Consider:</Text>
                     {alert.considerations.map((consideration, idx) => (
-                      <View key={idx} style={styles.bulletPoint}>
+                      <View key={idx} style={styles.bulletRow}>
                         <Text style={styles.bullet}>•</Text>
                         <Text style={styles.bulletText}>{consideration}</Text>
                       </View>
@@ -168,9 +187,9 @@ export default function PatientDetailScreen() {
                   </View>
 
                   <View style={styles.alertSubsection}>
-                    <Text style={styles.alertSubsectionTitle}>Actions:</Text>
+                    <Text style={styles.subsectionTitle}>Recommended Actions:</Text>
                     {alert.cognitivePrompts.map((prompt, idx) => (
-                      <View key={idx} style={styles.bulletPoint}>
+                      <View key={idx} style={styles.bulletRow}>
                         <Text style={styles.bullet}>•</Text>
                         <Text style={styles.bulletText}>{prompt}</Text>
                       </View>
@@ -184,24 +203,69 @@ export default function PatientDetailScreen() {
 
         {/* Vital Signs Section */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Vital Signs</Text>
+          <View style={styles.sectionHeader}>
+            <IconSymbol
+              ios_icon_name="heart.fill"
+              android_material_icon_name="favorite"
+              size={20}
+              color={colors.iconPrimary}
+              style={styles.sectionIcon}
+            />
+            <Text style={styles.sectionTitle}>Vital Signs</Text>
+          </View>
+
           <View style={styles.dataGrid}>
-            <View style={styles.dataItem}>
+            <View style={styles.dataCard}>
+              <View style={styles.dataIconContainer}>
+                <IconSymbol
+                  ios_icon_name="heart.fill"
+                  android_material_icon_name="favorite"
+                  size={18}
+                  color={colors.iconSecondary}
+                />
+              </View>
               <Text style={styles.dataLabel}>Heart Rate</Text>
               <Text style={styles.dataValue}>{hrText}</Text>
               <Text style={styles.dataUnit}>bpm</Text>
             </View>
-            <View style={styles.dataItem}>
+
+            <View style={styles.dataCard}>
+              <View style={styles.dataIconContainer}>
+                <IconSymbol
+                  ios_icon_name="waveform.path.ecg"
+                  android_material_icon_name="show-chart"
+                  size={18}
+                  color={colors.iconSecondary}
+                />
+              </View>
               <Text style={styles.dataLabel}>Blood Pressure</Text>
               <Text style={styles.dataValue}>{bpText}</Text>
               <Text style={styles.dataUnit}>mmHg</Text>
             </View>
-            <View style={styles.dataItem}>
+
+            <View style={styles.dataCard}>
+              <View style={styles.dataIconContainer}>
+                <IconSymbol
+                  ios_icon_name="thermometer"
+                  android_material_icon_name="thermostat"
+                  size={18}
+                  color={colors.iconSecondary}
+                />
+              </View>
               <Text style={styles.dataLabel}>Temperature</Text>
               <Text style={styles.dataValue}>{tempText}</Text>
               <Text style={styles.dataUnit}>°C</Text>
             </View>
-            <View style={styles.dataItem}>
+
+            <View style={styles.dataCard}>
+              <View style={styles.dataIconContainer}>
+                <IconSymbol
+                  ios_icon_name="drop.fill"
+                  android_material_icon_name="water-drop"
+                  size={18}
+                  color={colors.iconSecondary}
+                />
+              </View>
               <Text style={styles.dataLabel}>Urine Output</Text>
               <Text style={styles.dataValue}>{uoText}</Text>
               <Text style={styles.dataUnit}>ml/hr</Text>
@@ -211,24 +275,37 @@ export default function PatientDetailScreen() {
 
         {/* Laboratory Values Section */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Laboratory Values</Text>
+          <View style={styles.sectionHeader}>
+            <IconSymbol
+              ios_icon_name="flask.fill"
+              android_material_icon_name="science"
+              size={20}
+              color={colors.iconPrimary}
+              style={styles.sectionIcon}
+            />
+            <Text style={styles.sectionTitle}>Laboratory Values</Text>
+          </View>
+
           <View style={styles.dataGrid}>
-            <View style={styles.dataItem}>
+            <View style={styles.dataCard}>
               <Text style={styles.dataLabel}>WBC</Text>
               <Text style={styles.dataValue}>{wbcText}</Text>
               <Text style={styles.dataUnit}>K/μL</Text>
             </View>
-            <View style={styles.dataItem}>
+
+            <View style={styles.dataCard}>
               <Text style={styles.dataLabel}>Hemoglobin</Text>
               <Text style={styles.dataValue}>{hgbText}</Text>
               <Text style={styles.dataUnit}>g/dL</Text>
             </View>
-            <View style={styles.dataItem}>
+
+            <View style={styles.dataCard}>
               <Text style={styles.dataLabel}>Creatinine</Text>
               <Text style={styles.dataValue}>{creatText}</Text>
               <Text style={styles.dataUnit}>mg/dL</Text>
             </View>
-            <View style={styles.dataItem}>
+
+            <View style={styles.dataCard}>
               <Text style={styles.dataLabel}>Lactate</Text>
               <Text style={styles.dataValue}>{lactateText}</Text>
               <Text style={styles.dataUnit}>mmol/L</Text>
@@ -238,7 +315,17 @@ export default function PatientDetailScreen() {
 
         {/* Trends Section */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Trends</Text>
+          <View style={styles.sectionHeader}>
+            <IconSymbol
+              ios_icon_name="chart.line.uptrend.xyaxis"
+              android_material_icon_name="trending-up"
+              size={20}
+              color={colors.iconPrimary}
+              style={styles.sectionIcon}
+            />
+            <Text style={styles.sectionTitle}>Trends</Text>
+          </View>
+
           {trends.map((trendData, index) => {
             const trendIcon = getTrendIcon(trendData.trend);
             const trendColor = getTrendColor(trendData);
@@ -247,14 +334,14 @@ export default function PatientDetailScreen() {
             const trendText = `${firstValue} → ${lastValue}`;
 
             return (
-              <View key={index} style={styles.trendItem}>
-                <View style={styles.trendHeader}>
+              <View key={index} style={styles.trendCard}>
+                <View style={styles.trendRow}>
                   <Text style={styles.trendLabel}>{trendData.label}</Text>
-                  <View style={styles.trendIndicator}>
+                  <View style={styles.trendValueContainer}>
                     <IconSymbol
                       ios_icon_name="arrow.up"
                       android_material_icon_name={trendIcon}
-                      size={16}
+                      size={14}
                       color={trendColor}
                       style={styles.trendIcon}
                     />
@@ -264,7 +351,9 @@ export default function PatientDetailScreen() {
                   </View>
                 </View>
                 {trendData.concerning && (
-                  <Text style={styles.trendWarning}>Concerning trend</Text>
+                  <View style={styles.concerningBadge}>
+                    <Text style={styles.concerningText}>Concerning trend</Text>
+                  </View>
                 )}
               </View>
             );
@@ -272,18 +361,20 @@ export default function PatientDetailScreen() {
         </View>
 
         {/* Disclaimer */}
-        <View style={styles.disclaimerSection}>
+        <View style={styles.disclaimerCard}>
           <IconSymbol
-            ios_icon_name="exclamationmark.triangle"
-            android_material_icon_name="warning"
+            ios_icon_name="info.circle.fill"
+            android_material_icon_name="info"
             size={18}
-            color={colors.warning}
+            color={colors.info}
             style={styles.disclaimerIcon}
           />
           <Text style={styles.disclaimerText}>
             This tool provides educational pattern recognition only. All clinical decisions must be made by qualified healthcare professionals based on complete patient assessment.
           </Text>
         </View>
+
+        <View style={styles.bottomSpacer} />
       </ScrollView>
     </SafeAreaView>
   );
@@ -299,7 +390,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   scrollContent: {
-    paddingBottom: 32,
+    paddingBottom: spacing.xxxl,
   },
   loadingContainer: {
     flex: 1,
@@ -307,200 +398,220 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   loadingText: {
-    fontSize: 16,
+    fontSize: typography.body,
     color: colors.textSecondary,
   },
-  patientHeader: {
+  headerCard: {
+    backgroundColor: colors.backgroundAlt,
+    paddingHorizontal: spacing.xl,
+    paddingVertical: spacing.xl,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.borderLight,
+  },
+  headerTop: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
-    backgroundColor: colors.backgroundAlt,
-    paddingHorizontal: 20,
-    paddingVertical: 20,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
   },
-  patientHeaderInfo: {
+  headerInfo: {
     flex: 1,
+    gap: spacing.xs,
   },
   patientName: {
-    fontSize: 22,
-    fontWeight: '700',
+    fontSize: typography.h2,
+    fontWeight: typography.bold,
     color: colors.text,
-    marginBottom: 4,
   },
   procedureType: {
-    fontSize: 15,
-    fontWeight: '400',
+    fontSize: typography.body,
+    fontWeight: typography.regular,
     color: colors.textSecondary,
-    marginBottom: 4,
+    lineHeight: 22,
   },
   podText: {
-    fontSize: 14,
-    fontWeight: '500',
+    fontSize: typography.bodySmall,
+    fontWeight: typography.medium,
     color: colors.textLight,
   },
-  alertBadgeLarge: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 20,
-    marginLeft: 12,
+  statusBadge: {
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    borderRadius: borderRadius.md,
+    borderWidth: 1.5,
+    marginLeft: spacing.md,
   },
-  alertBadgeTextLarge: {
-    fontSize: 13,
-    fontWeight: '700',
+  statusText: {
+    fontSize: typography.caption,
+    fontWeight: typography.bold,
     letterSpacing: 0.5,
   },
   section: {
-    paddingHorizontal: 20,
-    paddingVertical: 16,
+    paddingHorizontal: spacing.xl,
+    paddingTop: spacing.xl,
   },
-  sectionTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: colors.text,
-    marginBottom: 12,
-  },
-  alertCard: {
-    backgroundColor: colors.card,
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 12,
-    borderLeftWidth: 4,
-    borderWidth: 1,
-    borderColor: colors.border,
-    boxShadow: '0px 1px 3px rgba(0, 0, 0, 0.1)',
-    elevation: 2,
-  },
-  alertHeader: {
+  sectionHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 8,
+    marginBottom: spacing.lg,
   },
-  alertIcon: {
-    marginRight: 8,
+  sectionIcon: {
+    marginRight: spacing.sm,
+  },
+  sectionTitle: {
+    fontSize: typography.h4,
+    fontWeight: typography.semibold,
+    color: colors.text,
+  },
+  alertCard: {
+    borderRadius: borderRadius.lg,
+    padding: spacing.lg,
+    marginBottom: spacing.md,
+    borderWidth: 1.5,
+  },
+  alertHeader: {
+    marginBottom: spacing.sm,
   },
   alertTitle: {
-    fontSize: 16,
-    fontWeight: '700',
+    fontSize: typography.h5,
+    fontWeight: typography.bold,
   },
   alertDescription: {
-    fontSize: 14,
-    fontWeight: '400',
+    fontSize: typography.bodySmall,
+    fontWeight: typography.regular,
     color: colors.text,
-    marginBottom: 12,
     lineHeight: 20,
+    marginBottom: spacing.md,
   },
   alertSubsection: {
-    marginTop: 12,
+    marginTop: spacing.md,
   },
-  alertSubsectionTitle: {
-    fontSize: 14,
-    fontWeight: '600',
+  subsectionTitle: {
+    fontSize: typography.bodySmall,
+    fontWeight: typography.semibold,
     color: colors.text,
-    marginBottom: 6,
+    marginBottom: spacing.xs,
   },
-  bulletPoint: {
+  bulletRow: {
     flexDirection: 'row',
     alignItems: 'flex-start',
-    marginBottom: 4,
+    marginBottom: spacing.xs,
+    paddingLeft: spacing.xs,
   },
   bullet: {
-    fontSize: 14,
-    fontWeight: '400',
+    fontSize: typography.bodySmall,
+    fontWeight: typography.regular,
     color: colors.textSecondary,
-    marginRight: 8,
-    marginTop: 2,
+    marginRight: spacing.sm,
+    width: 12,
   },
   bulletText: {
     flex: 1,
-    fontSize: 13,
-    fontWeight: '400',
+    fontSize: typography.caption,
+    fontWeight: typography.regular,
     color: colors.textSecondary,
     lineHeight: 18,
   },
   dataGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    marginHorizontal: -6,
+    marginHorizontal: -spacing.xs,
   },
-  dataItem: {
+  dataCard: {
     width: '50%',
-    paddingHorizontal: 6,
-    marginBottom: 16,
+    paddingHorizontal: spacing.xs,
+    marginBottom: spacing.md,
+  },
+  dataIconContainer: {
+    width: 36,
+    height: 36,
+    borderRadius: borderRadius.md,
+    backgroundColor: colors.borderLight,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: spacing.sm,
   },
   dataLabel: {
-    fontSize: 13,
-    fontWeight: '500',
+    fontSize: typography.caption,
+    fontWeight: typography.medium,
     color: colors.textSecondary,
-    marginBottom: 4,
+    marginBottom: spacing.xs,
   },
   dataValue: {
-    fontSize: 24,
-    fontWeight: '700',
+    fontSize: 28,
+    fontWeight: typography.bold,
     color: colors.text,
     marginBottom: 2,
+    letterSpacing: -0.5,
   },
   dataUnit: {
-    fontSize: 12,
-    fontWeight: '400',
+    fontSize: typography.tiny,
+    fontWeight: typography.regular,
     color: colors.textLight,
   },
-  trendItem: {
+  trendCard: {
     backgroundColor: colors.card,
-    borderRadius: 8,
-    padding: 12,
-    marginBottom: 8,
+    borderRadius: borderRadius.md,
+    padding: spacing.md,
+    marginBottom: spacing.sm,
     borderWidth: 1,
     borderColor: colors.border,
   },
-  trendHeader: {
+  trendRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
   },
   trendLabel: {
-    fontSize: 14,
-    fontWeight: '600',
+    fontSize: typography.bodySmall,
+    fontWeight: typography.semibold,
     color: colors.text,
   },
-  trendIndicator: {
+  trendValueContainer: {
     flexDirection: 'row',
     alignItems: 'center',
+    gap: spacing.xs,
   },
   trendIcon: {
-    marginRight: 4,
+    marginTop: 1,
   },
   trendValue: {
-    fontSize: 14,
-    fontWeight: '600',
+    fontSize: typography.bodySmall,
+    fontWeight: typography.semibold,
   },
-  trendWarning: {
-    fontSize: 12,
-    fontWeight: '500',
+  concerningBadge: {
+    marginTop: spacing.sm,
+    paddingTop: spacing.sm,
+    borderTopWidth: 1,
+    borderTopColor: colors.alertRedBorder,
+  },
+  concerningText: {
+    fontSize: typography.caption,
+    fontWeight: typography.semibold,
     color: colors.alertRed,
-    marginTop: 4,
   },
-  disclaimerSection: {
+  disclaimerCard: {
     flexDirection: 'row',
     alignItems: 'flex-start',
     backgroundColor: colors.alertYellowBg,
-    marginHorizontal: 20,
-    marginTop: 8,
-    padding: 16,
-    borderRadius: 12,
+    marginHorizontal: spacing.xl,
+    marginTop: spacing.xl,
+    padding: spacing.lg,
+    borderRadius: borderRadius.lg,
     borderWidth: 1,
-    borderColor: colors.border,
+    borderColor: colors.alertYellowBorder,
   },
   disclaimerIcon: {
-    marginRight: 12,
+    marginRight: spacing.md,
     marginTop: 2,
   },
   disclaimerText: {
     flex: 1,
-    fontSize: 12,
-    fontWeight: '400',
+    fontSize: typography.caption,
+    fontWeight: typography.regular,
     color: colors.text,
     lineHeight: 18,
+  },
+  bottomSpacer: {
+    height: spacing.xxxl,
   },
 });
