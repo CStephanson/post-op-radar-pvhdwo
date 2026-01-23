@@ -43,37 +43,30 @@ export default function PatientDetailScreen() {
   const [editLactate, setEditLactate] = useState('');
 
   const loadPatientData = useCallback(async () => {
-    console.log('Loading patient data for ID:', id);
+    console.log('[PatientDetail] Loading patient data for ID:', id);
     try {
-      const { authenticatedGet } = await import('@/utils/api');
-      const patientData = await authenticatedGet<any>(`/api/patients/${id}`);
+      const { getPatientById } = await import('@/utils/localStorage');
+      const patientData = await getPatientById(id as string);
       
-      // Convert date strings to Date objects
-      const patientWithDates = {
-        ...patientData,
-        operationDateTime: patientData.operationDateTime ? new Date(patientData.operationDateTime) : undefined,
-        createdAt: new Date(patientData.createdAt),
-        updatedAt: new Date(patientData.updatedAt),
-        vitals: patientData.vitalSigns?.map((v: any) => ({
-          ...v,
-          timestamp: new Date(v.timestamp),
-        })) || [],
-        labs: patientData.labValues?.map((l: any) => ({
-          ...l,
-          timestamp: new Date(l.timestamp),
-        })) || [],
-        // Load manual status override fields
-        statusMode: patientData.statusMode || 'auto',
-        manualStatus: patientData.manualStatus,
-        computedStatus: patientData.computedStatus,
-      };
+      if (!patientData) {
+        console.error('[PatientDetail] Patient not found in local storage');
+        Alert.alert('Error', 'Patient not found', [
+          { text: 'OK', onPress: () => router.back() }
+        ]);
+        return;
+      }
       
-      setPatient(patientWithDates);
-      updatePatientAnalysis(patientWithDates);
+      console.log('[PatientDetail] Patient loaded from local storage:', patientData.name);
+      setPatient(patientData);
+      updatePatientAnalysis(patientData);
     } catch (error: any) {
-      console.error('Error loading patient data:', error);
+      console.error('[PatientDetail] Error loading patient data:', error);
+      Alert.alert('Storage Error', 'Failed to load patient data from local storage', [
+        { text: 'Retry', onPress: loadPatientData },
+        { text: 'Cancel', onPress: () => router.back() }
+      ]);
     }
-  }, [id]);
+  }, [id, router]);
 
   useEffect(() => {
     loadPatientData();
@@ -130,26 +123,14 @@ export default function PatientDetailScreen() {
   };
 
   const saveEdits = async () => {
-    console.log('User saved edits for:', editType);
+    console.log('[PatientDetail] User saved edits for:', editType);
     if (!patient) return;
     
     try {
-      const { authenticatedPost, authenticatedPut } = await import('@/utils/api');
+      const { updatePatient } = await import('@/utils/localStorage');
       
       if (editType === 'vitals') {
-        const vitalsData = {
-          heartRate: parseFloat(editHeartRate) || undefined,
-          systolicBP: parseFloat(editSystolicBP) || undefined,
-          diastolicBP: parseFloat(editDiastolicBP) || undefined,
-          temperature: editTemperature || undefined,
-          urineOutput: editUrineOutput || undefined,
-          timestamp: new Date().toISOString(),
-        };
-        
-        console.log('Saving vitals:', vitalsData);
-        await authenticatedPost(`/api/patients/${patient.id}/vitals`, vitalsData);
-        
-        // Add to local state
+        // Add new vitals entry
         const newVitals: VitalSigns = {
           heartRate: parseFloat(editHeartRate) || 0,
           systolicBP: parseFloat(editSystolicBP) || 0,
@@ -158,31 +139,22 @@ export default function PatientDetailScreen() {
           urineOutput: editUrineOutput ? parseFloat(editUrineOutput) : undefined,
           timestamp: new Date(),
         };
+        
+        console.log('[PatientDetail] Adding new vitals:', newVitals);
         const updatedPatient = { ...patient, vitals: [...patient.vitals, newVitals] };
-        setPatient(updatedPatient);
         updatePatientAnalysis(updatedPatient);
         
-        // Update patient record with new computed status (only if in auto mode)
-        if (updatedPatient.statusMode !== 'manual') {
-          console.log('Auto mode - updating patient with computed status');
-          await authenticatedPut(`/api/patients/${patient.id}`, {
-            computedStatus: updatedPatient.computedStatus,
-            alertStatus: updatedPatient.alertStatus,
-          });
-        }
+        // Save to local storage with ALL fields including new vitals
+        await updatePatient(patient.id, {
+          vitals: updatedPatient.vitals,
+          alertStatus: updatedPatient.alertStatus,
+          computedStatus: updatedPatient.computedStatus,
+        });
+        
+        setPatient(updatedPatient);
+        console.log('[PatientDetail] Vitals saved to local storage');
       } else {
-        const labsData = {
-          wbc: editWBC || undefined,
-          hemoglobin: editHemoglobin || undefined,
-          creatinine: editCreatinine || undefined,
-          lactate: editLactate || undefined,
-          timestamp: new Date().toISOString(),
-        };
-        
-        console.log('Saving labs:', labsData);
-        await authenticatedPost(`/api/patients/${patient.id}/labs`, labsData);
-        
-        // Add to local state
+        // Add new labs entry
         const newLabs: LabValues = {
           wbc: parseFloat(editWBC) || 0,
           hemoglobin: parseFloat(editHemoglobin) || 0,
@@ -190,24 +162,30 @@ export default function PatientDetailScreen() {
           lactate: editLactate ? parseFloat(editLactate) : undefined,
           timestamp: new Date(),
         };
+        
+        console.log('[PatientDetail] Adding new labs:', newLabs);
         const updatedPatient = { ...patient, labs: [...patient.labs, newLabs] };
-        setPatient(updatedPatient);
         updatePatientAnalysis(updatedPatient);
         
-        // Update patient record with new computed status (only if in auto mode)
-        if (updatedPatient.statusMode !== 'manual') {
-          console.log('Auto mode - updating patient with computed status');
-          await authenticatedPut(`/api/patients/${patient.id}`, {
-            computedStatus: updatedPatient.computedStatus,
-            alertStatus: updatedPatient.alertStatus,
-          });
-        }
+        // Save to local storage with ALL fields including new labs
+        await updatePatient(patient.id, {
+          labs: updatedPatient.labs,
+          alertStatus: updatedPatient.alertStatus,
+          computedStatus: updatedPatient.computedStatus,
+        });
+        
+        setPatient(updatedPatient);
+        console.log('[PatientDetail] Labs saved to local storage');
       }
       
       setEditModalVisible(false);
+      Alert.alert('Success', 'Data saved successfully');
     } catch (error: any) {
-      console.error('Error saving data:', error);
-      Alert.alert('Error', error.message || 'Failed to save data');
+      console.error('[PatientDetail] Error saving data:', error);
+      Alert.alert('Storage Error', 'Failed to save data to local storage. Please try again.', [
+        { text: 'Retry', onPress: saveEdits },
+        { text: 'Cancel', style: 'cancel' }
+      ]);
     }
   };
 

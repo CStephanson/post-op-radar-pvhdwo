@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useCallback } from 'react';
 import {
   View,
   Text,
@@ -11,102 +11,57 @@ import {
   Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useRouter, Redirect, useFocusEffect } from 'expo-router';
+import { useRouter, useFocusEffect } from 'expo-router';
 import { colors, typography, spacing, borderRadius, shadows } from '@/styles/commonStyles';
 import { IconSymbol } from '@/components/IconSymbol';
 import { Patient, AlertStatus, SortOption } from '@/types/patient';
-import { useAuth } from '@/contexts/AuthContext';
-
-function resolveImageSource(source: string | number | any): any {
-  if (!source) return { uri: '' };
-  if (typeof source === 'string') return { uri: source };
-  return source;
-}
+import { getAllPatients } from '@/utils/localStorage';
 
 export default function HomeScreen() {
-  console.log('HomeScreen rendered');
+  console.log('[HomeScreen] Rendered - local-only mode');
   const router = useRouter();
-  const { user, loading: authLoading } = useAuth();
   const [patients, setPatients] = useState<Patient[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [sortBy, setSortBy] = useState<SortOption>('status');
   const [showSortMenu, setShowSortMenu] = useState(false);
-  const [lastOpenedPatientId, setLastOpenedPatientId] = useState<string | null>(null);
-
-  const loadLastOpenedPatient = useCallback(async () => {
-    try {
-      const { authenticatedGet } = await import('@/utils/api');
-      const profile = await authenticatedGet<any>('/api/profile');
-      if (profile.lastOpenedPatientId) {
-        setLastOpenedPatientId(profile.lastOpenedPatientId);
-        console.log('Last opened patient:', profile.lastOpenedPatientId);
-      }
-    } catch (error: any) {
-      console.error('Error loading last opened patient:', error);
-    }
-  }, []);
 
   const loadPatients = useCallback(async () => {
-    console.log('Loading patients for user');
+    console.log('[HomeScreen] Loading patients from local storage');
     setLoading(true);
+    setError(null);
     try {
-      const { authenticatedGet } = await import('@/utils/api');
-      const patientsData = await authenticatedGet<Patient[]>('/api/patients');
-      
-      const patientsWithDates = patientsData.map(patient => ({
-        ...patient,
-        operationDateTime: patient.operationDateTime ? new Date(patient.operationDateTime) : undefined,
-        createdAt: new Date(patient.createdAt),
-        updatedAt: new Date(patient.updatedAt),
-        vitals: patient.vitals?.map(v => ({
-          ...v,
-          timestamp: new Date(v.timestamp),
-        })) || [],
-        labs: patient.labs?.map(l => ({
-          ...l,
-          timestamp: new Date(l.timestamp),
-        })) || [],
-      }));
-      
-      console.log('[HomeScreen] Loaded patients:', patientsWithDates.length);
-      setPatients(patientsWithDates);
-    } catch (error: any) {
-      console.error('Error loading patients:', error);
-      
-      // Show user-friendly error for auth issues
-      if (error.message.includes('Session expired') || error.message.includes('sign in') || error.message.includes('Authentication token')) {
-        Alert.alert(
-          'Session Expired',
-          'Your session has expired. Please sign in again.',
-          [
-            {
-              text: 'Sign In',
-              onPress: () => {
-                router.replace('/auth');
-              },
-            },
-          ]
-        );
-      } else if (error.message.includes('Guest mode')) {
-        // Guest mode - show info message
-        Alert.alert('Guest Mode', error.message);
-      } else {
-        Alert.alert('Error', error.message || 'Failed to load patients');
-      }
+      const patientsData = await getAllPatients();
+      console.log('[HomeScreen] Loaded', patientsData.length, 'patients from local storage');
+      setPatients(patientsData);
+    } catch (err: any) {
+      console.error('[HomeScreen] Error loading patients:', err);
+      setError('Failed to load patients from local storage');
+      Alert.alert(
+        'Storage Error',
+        'Failed to load patients from local storage. Please try again.',
+        [
+          { 
+            text: 'Retry', 
+            onPress: () => loadPatients() 
+          },
+          { 
+            text: 'OK', 
+            style: 'cancel' 
+          }
+        ]
+      );
     } finally {
       setLoading(false);
     }
-  }, [router]);
+  }, []);
 
-  // Refresh patient list when screen comes into focus (e.g., after adding a patient)
+  // Refresh patient list when screen comes into focus (e.g., after adding/editing a patient)
   useFocusEffect(
     useCallback(() => {
       console.log('[HomeScreen] Screen focused - refreshing patient list');
-      if (user) {
-        loadPatients();
-        loadLastOpenedPatient();
-      }
-    }, [user, loadPatients, loadLastOpenedPatient])
+      loadPatients();
+    }, [loadPatients])
   );
 
   const sortPatients = (patientsToSort: Patient[], sortOption: SortOption): Patient[] => {
@@ -134,21 +89,8 @@ export default function HomeScreen() {
     return sorted;
   };
 
-  const handlePatientPress = async (patientId: string) => {
+  const handlePatientPress = (patientId: string) => {
     console.log('User tapped patient card:', patientId);
-    
-    try {
-      const { authenticatedPut } = await import('@/utils/api');
-      await authenticatedPut('/api/profile', {
-        lastOpenedPatientId: patientId,
-        lastOpenedAt: new Date().toISOString(),
-      });
-      setLastOpenedPatientId(patientId);
-      console.log('Updated last opened patient to:', patientId);
-    } catch (error: any) {
-      console.error('Error updating last opened patient:', error);
-    }
-    
     router.push(`/patient/${patientId}`);
   };
 
@@ -201,20 +143,6 @@ export default function HomeScreen() {
     return 'warning';
   };
 
-  if (authLoading) {
-    return (
-      <SafeAreaView style={styles.safeArea} edges={['top']}>
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={colors.primary} />
-        </View>
-      </SafeAreaView>
-    );
-  }
-
-  if (!user) {
-    return <Redirect href="/auth" />;
-  }
-
   const sortedPatients = sortPatients(patients, sortBy);
   const currentSortLabel = getSortLabel(sortBy);
 
@@ -235,18 +163,6 @@ export default function HomeScreen() {
                 <Text style={styles.disclaimerText}>Educational use only</Text>
               </View>
             </View>
-            
-            <TouchableOpacity
-              style={styles.profileButton}
-              onPress={() => router.push('/(tabs)/profile')}
-            >
-              <IconSymbol
-                ios_icon_name="person.circle.fill"
-                android_material_icon_name="account-circle"
-                size={28}
-                color={colors.primary}
-              />
-            </TouchableOpacity>
           </View>
         </View>
 
@@ -352,30 +268,14 @@ export default function HomeScreen() {
                 const displayName = patient.name && patient.name.trim() ? patient.name : 'Unnamed Patient';
                 
                 const isManualStatus = patient.statusMode === 'manual';
-                const isLastOpened = patient.id === lastOpenedPatientId;
 
                 return (
                   <React.Fragment key={index}>
                     <TouchableOpacity
-                      style={[
-                        styles.patientCard,
-                        isLastOpened && styles.patientCardLastOpened,
-                      ]}
+                      style={styles.patientCard}
                       onPress={() => handlePatientPress(patient.id)}
                       activeOpacity={0.7}
                     >
-                      {isLastOpened && (
-                        <View style={styles.lastOpenedBadge}>
-                          <IconSymbol
-                            ios_icon_name="clock.fill"
-                            android_material_icon_name="access-time"
-                            size={10}
-                            color={colors.highlightText}
-                          />
-                          <Text style={styles.lastOpenedText}>Last viewed</Text>
-                        </View>
-                      )}
-
                       <View style={[styles.alertBar, { 
                         backgroundColor: alertBgColor,
                         borderLeftColor: alertColor,
@@ -493,9 +393,6 @@ const styles = StyleSheet.create({
     fontWeight: typography.medium,
     color: colors.textMuted,
     letterSpacing: 0.1,
-  },
-  profileButton: {
-    marginLeft: spacing.md,
   },
   scrollView: {
     flex: 1,
@@ -646,27 +543,6 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
     overflow: 'hidden',
     ...shadows.sm,
-  },
-  patientCardLastOpened: {
-    borderWidth: 2,
-    borderColor: colors.highlightBorder,
-    backgroundColor: colors.highlight,
-    ...shadows.md,
-  },
-  lastOpenedBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.xs - 3,
-    paddingHorizontal: spacing.lg,
-    paddingTop: spacing.sm - 1,
-    paddingBottom: spacing.xs - 3,
-  },
-  lastOpenedText: {
-    fontSize: typography.tiny - 2,
-    fontWeight: typography.bold,
-    color: colors.highlightText,
-    textTransform: 'uppercase',
-    letterSpacing: 0.6,
   },
   alertBar: {
     flexDirection: 'row',

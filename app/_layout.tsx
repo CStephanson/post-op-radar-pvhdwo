@@ -1,13 +1,12 @@
 
 import "react-native-reanimated";
-import React, { useEffect } from "react";
+import React, { useEffect, useState } from "react";
 import { useFonts } from "expo-font";
 import { Stack } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import { SystemBars } from "react-native-edge-to-edge";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
-import { useColorScheme, Alert, View, Text, ActivityIndicator } from "react-native";
-import { useNetworkState } from "expo-network";
+import { useColorScheme, View, Text, ActivityIndicator } from "react-native";
 import {
   DarkTheme,
   DefaultTheme,
@@ -16,9 +15,8 @@ import {
 } from "@react-navigation/native";
 import { StatusBar } from "expo-status-bar";
 import { WidgetProvider } from "@/contexts/WidgetContext";
-import { AuthProvider } from "@/contexts/AuthContext";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
-import { BACKEND_URL } from "@/utils/api";
+import { migrateExistingData } from "@/utils/localStorage";
 
 // Prevent the splash screen from auto-hiding before asset loading is complete.
 SplashScreen.preventAutoHideAsync();
@@ -34,6 +32,7 @@ if (typeof ErrorUtils !== 'undefined') {
   });
 }
 
+// App goes directly to patient dashboard - no authentication
 export const unstable_settings = {
   initialRouteName: "(tabs)",
 };
@@ -41,14 +40,14 @@ export const unstable_settings = {
 export default function RootLayout() {
   console.log('[App] ===== RootLayout rendering =====');
   const colorScheme = useColorScheme();
-  const networkState = useNetworkState();
+  const router = useRouter();
   const [loaded] = useFonts({
     SpaceMono: require("../assets/fonts/SpaceMono-Regular.ttf"),
   });
+  const [migrationComplete, setMigrationComplete] = useState(false);
 
   useEffect(() => {
     console.log('[App] Root layout mounted - app is starting');
-    console.log('[App] Backend URL:', BACKEND_URL);
     
     // Initialize error logging after app has started
     try {
@@ -65,29 +64,29 @@ export default function RootLayout() {
     } catch (error) {
       console.error('[App] Failed to initialize error logging:', error);
     }
+
+    // Run one-time data migration
+    migrateExistingData()
+      .then(() => {
+        console.log('[App] Data migration complete');
+        setMigrationComplete(true);
+      })
+      .catch((error) => {
+        console.error('[App] Data migration failed:', error);
+        // Don't block app startup on migration failure
+        setMigrationComplete(true);
+      });
   }, []);
 
   useEffect(() => {
-    if (loaded) {
-      console.log('[App] Fonts loaded, hiding splash screen');
+    if (loaded && migrationComplete) {
+      console.log('[App] Fonts loaded and migration complete, hiding splash screen');
       SplashScreen.hideAsync();
     }
-  }, [loaded]);
+  }, [loaded, migrationComplete]);
 
-  React.useEffect(() => {
-    if (
-      !networkState.isConnected &&
-      networkState.isInternetReachable === false
-    ) {
-      Alert.alert(
-        "🔌 You are offline",
-        "You can keep using the app! Your changes will be saved locally and synced when you are back online."
-      );
-    }
-  }, [networkState.isConnected, networkState.isInternetReachable]);
-
-  if (!loaded) {
-    console.log('[App] Fonts not loaded yet, showing loading screen');
+  if (!loaded || !migrationComplete) {
+    console.log('[App] Fonts not loaded or migration in progress, showing loading screen');
     // Show a visible loading screen instead of null to prevent blank screen
     return (
       <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#fff' }}>
@@ -96,13 +95,13 @@ export default function RootLayout() {
           Loading OpMGMT...
         </Text>
         <Text style={{ fontSize: 14, color: '#666', marginTop: 8 }}>
-          Initializing app
+          Initializing local storage
         </Text>
       </View>
     );
   }
 
-  console.log('[App] Fonts loaded, rendering app layout');
+  console.log('[App] Fonts loaded and migration complete, rendering app layout');
 
   const CustomDefaultTheme: Theme = {
     ...DefaultTheme,
@@ -135,23 +134,17 @@ export default function RootLayout() {
       <ThemeProvider
         value={colorScheme === "dark" ? CustomDarkTheme : CustomDefaultTheme}
       >
-        <AuthProvider>
-          <WidgetProvider>
-            <GestureHandlerRootView style={{ flex: 1 }}>
-              <Stack>
-                <Stack.Screen name="auth" options={{ headerShown: false }} />
-                <Stack.Screen name="auth-popup" options={{ headerShown: false }} />
-                <Stack.Screen name="auth-callback" options={{ headerShown: false }} />
-                <Stack.Screen name="profile-setup" options={{ headerShown: false }} />
-                <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-                <Stack.Screen name="add-patient" options={{ headerShown: true, title: 'Add Patient' }} />
-                <Stack.Screen name="patient/[id]" options={{ headerShown: true, title: 'Patient Details' }} />
-                <Stack.Screen name="patient-info/[id]" options={{ headerShown: true, title: 'Patient Information' }} />
-              </Stack>
-              <SystemBars style={"auto"} />
-            </GestureHandlerRootView>
-          </WidgetProvider>
-        </AuthProvider>
+        <WidgetProvider>
+          <GestureHandlerRootView style={{ flex: 1 }}>
+            <Stack>
+              <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+              <Stack.Screen name="add-patient" options={{ headerShown: true, title: 'Add Patient' }} />
+              <Stack.Screen name="patient/[id]" options={{ headerShown: true, title: 'Patient Details' }} />
+              <Stack.Screen name="patient-info/[id]" options={{ headerShown: true, title: 'Patient Information' }} />
+            </Stack>
+            <SystemBars style={"auto"} />
+          </GestureHandlerRootView>
+        </WidgetProvider>
       </ThemeProvider>
     </ErrorBoundary>
   );

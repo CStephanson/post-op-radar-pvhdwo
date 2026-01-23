@@ -87,11 +87,11 @@ export default function PatientInfoScreen() {
     manualStatus !== originalValues.manualStatus;
 
   const handleSave = useCallback(async (shouldNavigate: boolean = true) => {
-    console.log('Saving patient info, shouldNavigate:', shouldNavigate);
+    console.log('[PatientInfo] Saving patient info, shouldNavigate:', shouldNavigate);
     
     setSaving(true);
     try {
-      const { authenticatedPut, authenticatedGet } = await import('@/utils/api');
+      const { updatePatient, getPatientById } = await import('@/utils/localStorage');
       
       // ALWAYS include ALL fields in the save payload (no partial saves)
       const patientData = {
@@ -103,7 +103,7 @@ export default function PatientInfoScreen() {
         specimensTaken: specimensTaken.trim() || '',
         estimatedBloodLoss: estimatedBloodLoss.trim() || '',
         complications: complications.trim() || '',
-        operationDateTime: operationDateTime.toISOString(),
+        operationDateTime: operationDateTime,
         surgeon: surgeon.trim() || '',
         anesthesiologist: anesthesiologist.trim() || '',
         anesthesiaType: anesthesiaType.trim() || '',
@@ -113,14 +113,18 @@ export default function PatientInfoScreen() {
         manualStatus,
       };
       
-      console.log('Saving ALL patient fields:', patientData);
+      console.log('[PatientInfo] Saving ALL patient fields to local storage');
       
       // Single atomic update - either all fields save or it fails
-      await authenticatedPut(`/api/patients/${id}`, patientData);
+      await updatePatient(id as string, patientData);
       
       // Re-fetch the saved record to ensure UI matches persisted data
-      console.log('Re-fetching saved patient to sync state');
-      const savedPatient = await authenticatedGet<any>(`/api/patients/${id}`);
+      console.log('[PatientInfo] Re-fetching saved patient to verify persistence');
+      const savedPatient = await getPatientById(id as string);
+      
+      if (!savedPatient) {
+        throw new Error('Failed to verify patient was saved');
+      }
       
       // Update local state with canonical version from storage
       const savedValues = {
@@ -132,7 +136,7 @@ export default function PatientInfoScreen() {
         specimensTaken: savedPatient.specimensTaken || '',
         estimatedBloodLoss: savedPatient.estimatedBloodLoss || '',
         complications: savedPatient.complications || '',
-        operationDateTime: savedPatient.operationDateTime ? new Date(savedPatient.operationDateTime) : new Date(),
+        operationDateTime: savedPatient.operationDateTime || new Date(),
         surgeon: savedPatient.surgeon || '',
         anesthesiologist: savedPatient.anesthesiologist || '',
         anesthesiaType: savedPatient.anesthesiaType || '',
@@ -160,17 +164,19 @@ export default function PatientInfoScreen() {
       setManualStatus(savedValues.manualStatus);
       setOriginalValues(savedValues);
       
-      // Show success feedback
-      Alert.alert('Saved', 'Patient information saved successfully!');
+      console.log('[PatientInfo] Patient information saved and verified in local storage');
+      Alert.alert('Success', 'Patient information saved successfully!');
       
       // Navigate back after save completes (if requested)
       if (shouldNavigate) {
         router.back();
       }
     } catch (error: any) {
-      console.error('Error saving patient info:', error);
-      // Show clear error feedback - do not silently drop fields
-      Alert.alert('Error', error.message || 'Failed to save patient information. Please try again.');
+      console.error('[PatientInfo] Error saving patient info:', error);
+      Alert.alert('Storage Error', 'Failed to save patient information to local storage. Please try again.', [
+        { text: 'Retry', onPress: () => handleSave(shouldNavigate) },
+        { text: 'Cancel', style: 'cancel' }
+      ]);
       throw error; // Re-throw so useUnsavedChanges knows save failed
     } finally {
       setSaving(false);
@@ -178,11 +184,21 @@ export default function PatientInfoScreen() {
   }, [id, name, idStatement, procedureType, preOpDiagnosis, postOpDiagnosis, specimensTaken, estimatedBloodLoss, complications, operationDateTime, surgeon, anesthesiologist, anesthesiaType, clinicalStatus, hospitalLocation, statusMode, manualStatus, router]);
 
   const loadPatientInfo = useCallback(async () => {
-    console.log('Loading patient info for ID:', id);
+    console.log('[PatientInfo] Loading patient info for ID:', id);
     setLoading(true);
     try {
-      const { authenticatedGet } = await import('@/utils/api');
-      const patient = await authenticatedGet<any>(`/api/patients/${id}`);
+      const { getPatientById } = await import('@/utils/localStorage');
+      const patient = await getPatientById(id as string);
+      
+      if (!patient) {
+        console.error('[PatientInfo] Patient not found in local storage');
+        Alert.alert('Error', 'Patient not found', [
+          { text: 'OK', onPress: () => router.back() }
+        ]);
+        return;
+      }
+      
+      console.log('[PatientInfo] Patient loaded from local storage:', patient.name);
       
       const values = {
         name: patient.name || '',
@@ -193,7 +209,7 @@ export default function PatientInfoScreen() {
         specimensTaken: patient.specimensTaken || '',
         estimatedBloodLoss: patient.estimatedBloodLoss || '',
         complications: patient.complications || '',
-        operationDateTime: patient.operationDateTime ? new Date(patient.operationDateTime) : new Date(),
+        operationDateTime: patient.operationDateTime || new Date(),
         surgeon: patient.surgeon || '',
         anesthesiologist: patient.anesthesiologist || '',
         anesthesiaType: patient.anesthesiaType || '',
@@ -221,12 +237,15 @@ export default function PatientInfoScreen() {
       setManualStatus(values.manualStatus);
       setOriginalValues(values);
     } catch (error: any) {
-      console.error('Error loading patient info:', error);
-      Alert.alert('Error', error.message || 'Failed to load patient information');
+      console.error('[PatientInfo] Error loading patient info:', error);
+      Alert.alert('Storage Error', 'Failed to load patient information from local storage', [
+        { text: 'Retry', onPress: loadPatientInfo },
+        { text: 'Cancel', onPress: () => router.back() }
+      ]);
     } finally {
       setLoading(false);
     }
-  }, [id]);
+  }, [id, router]);
 
   // Unsaved changes protection
   const { handleBackPress, isNavigating } = useUnsavedChanges({
@@ -260,7 +279,7 @@ export default function PatientInfoScreen() {
   }, [loadPatientInfo]);
 
   const handleDelete = () => {
-    console.log('User tapped delete button');
+    console.log('[PatientInfo] User tapped delete button');
     Alert.alert(
       'Delete Patient',
       'Are you sure you want to permanently delete this patient and all associated data? This action cannot be undone.',
@@ -273,16 +292,28 @@ export default function PatientInfoScreen() {
           text: 'Delete',
           style: 'destructive',
           onPress: async () => {
-            console.log('User confirmed deletion');
+            console.log('[PatientInfo] User confirmed deletion');
             try {
-              const { authenticatedDelete } = await import('@/utils/api');
-              await authenticatedDelete(`/api/patients/${id}`);
+              const { deletePatient, getPatientById } = await import('@/utils/localStorage');
               
-              Alert.alert('Success', 'Patient deleted');
+              // Delete from local storage
+              await deletePatient(id as string);
+              
+              // Verify deletion
+              const deletedPatient = await getPatientById(id as string);
+              if (deletedPatient) {
+                throw new Error('Failed to verify patient was deleted');
+              }
+              
+              console.log('[PatientInfo] Patient deleted from local storage');
+              Alert.alert('Success', 'Patient deleted successfully');
               router.replace('/(tabs)/(home)/');
             } catch (error: any) {
-              console.error('Error deleting patient:', error);
-              Alert.alert('Error', error.message || 'Failed to delete patient');
+              console.error('[PatientInfo] Error deleting patient:', error);
+              Alert.alert('Storage Error', 'Failed to delete patient from local storage. Please try again.', [
+                { text: 'Retry', onPress: handleDelete },
+                { text: 'Cancel', style: 'cancel' }
+              ]);
             }
           },
         },

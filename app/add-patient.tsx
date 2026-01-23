@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import {
   View,
   Text,
@@ -17,12 +17,11 @@ import { useRouter, Stack } from 'expo-router';
 import { colors, typography, spacing, borderRadius, shadows } from '@/styles/commonStyles';
 import { IconSymbol } from '@/components/IconSymbol';
 import DateTimePicker from '@react-native-community/datetimepicker';
-import { useAuth } from '@/contexts/AuthContext';
+import { createPatient } from '@/utils/localStorage';
 
 export default function AddPatientScreen() {
   console.log('AddPatientScreen rendered - Add Patient clicked');
   const router = useRouter();
-  const { user, bearerToken, isGuest } = useAuth();
   
   const [saving, setSaving] = useState(false);
   
@@ -54,78 +53,20 @@ export default function AddPatientScreen() {
   
   const [nameError, setNameError] = useState('');
 
-  // Debug state - show auth status
-  const [showDebugInfo, setShowDebugInfo] = useState(true);
-  const [tokenLength, setTokenLength] = useState<number>(0);
-
-  // Check token on mount
-  useEffect(() => {
-    const checkToken = async () => {
-      if (bearerToken) {
-        setTokenLength(bearerToken.length);
-        console.log('[AddPatient] Token present on mount, length:', bearerToken.length);
-      } else {
-        console.log('[AddPatient] No token present on mount');
-      }
-    };
-    checkToken();
-  }, [bearerToken]);
-
   const handleCancel = () => {
     console.log('User tapped Cancel button');
     router.back();
   };
 
   const handleAddPatient = async () => {
-    console.log('User tapped Add Patient button - handleAddPatient fired');
-    console.log('[AddPatient] Auth state - user:', user?.email, 'hasToken:', !!bearerToken, 'isGuest:', isGuest);
+    console.log('[AddPatient] User tapped Add Patient button');
     
     // Validate name is not empty
     const trimmedName = name.trim();
     if (!trimmedName) {
-      console.log('Validation failed: Name is empty');
+      console.log('[AddPatient] Validation failed: Name is empty');
       setNameError('Patient name is required');
       Alert.alert('Validation Error', 'Please enter a patient name');
-      return;
-    }
-    
-    // Check if user is in guest mode
-    if (isGuest) {
-      console.log('[AddPatient] User is in guest mode - cannot save patient');
-      Alert.alert(
-        'Guest Mode',
-        'This feature requires a signed-in account. Guest mode does not support saving data to the server.',
-        [
-          {
-            text: 'OK',
-            style: 'cancel',
-          },
-          {
-            text: 'Sign In',
-            onPress: () => {
-              router.replace('/auth');
-            },
-          },
-        ]
-      );
-      return;
-    }
-
-    // Check if token is present
-    if (!bearerToken) {
-      console.log('[AddPatient] No bearer token - session missing');
-      Alert.alert(
-        'Session Missing',
-        'Your session has expired. Please sign in again.',
-        [
-          {
-            text: 'Go to Login',
-            onPress: () => {
-              router.replace('/auth');
-            },
-          },
-        ]
-      );
       return;
     }
     
@@ -133,8 +74,6 @@ export default function AddPatientScreen() {
     setSaving(true);
     
     try {
-      const { authenticatedPost } = await import('@/utils/api');
-      
       // Combine intra-op and post-op complications into single field
       const combinedComplications = [
         intraOpComplications.trim() && `Intra-op: ${intraOpComplications.trim()}`,
@@ -150,7 +89,7 @@ export default function AddPatientScreen() {
         specimensTaken: specimensTaken.trim() || '',
         estimatedBloodLoss: estimatedBloodLoss.trim() || '',
         complications: combinedComplications,
-        operationDateTime: operationDateTime.toISOString(),
+        operationDateTime: operationDateTime,
         surgeon: surgeon.trim() || '',
         anesthesiologist: anesthesiologist.trim() || '',
         anesthesiaType: anesthesiaType.trim() || '',
@@ -158,57 +97,39 @@ export default function AddPatientScreen() {
         hospitalLocation: hospitalLocation.trim() || '',
         postOpDay: parseInt(postOpDay) || 1,
         alertStatus: alertStatus,
-        statusMode: 'auto',
+        statusMode: 'auto' as 'auto' | 'manual',
         manualStatus: alertStatus,
+        vitals: [],
+        labs: [],
+        notes: '',
       };
       
-      console.log('[AddPatient] Creating new patient with data:', newPatientData);
-      const newPatient = await authenticatedPost<any>('/api/patients', newPatientData);
+      console.log('[AddPatient] Creating new patient in local storage:', newPatientData.name);
+      const newPatient = await createPatient(newPatientData);
       
-      console.log('[AddPatient] Patient created successfully:', newPatient);
+      console.log('[AddPatient] Patient created successfully in local storage:', newPatient.id);
+      
+      // Verify patient was saved by re-reading from storage
+      const { getPatientById } = await import('@/utils/localStorage');
+      const verifiedPatient = await getPatientById(newPatient.id);
+      
+      if (!verifiedPatient) {
+        throw new Error('Failed to verify patient was saved to local storage');
+      }
+      
+      console.log('[AddPatient] Patient verified in local storage');
       Alert.alert('Success', `Patient "${trimmedName}" added successfully!`);
       
-      // Navigate back to dashboard and refresh
+      // Navigate back to dashboard - it will auto-refresh via useFocusEffect
       console.log('[AddPatient] Navigating back to dashboard');
       router.replace('/(tabs)/(home)/');
     } catch (error: any) {
       console.error('[AddPatient] Error creating patient:', error);
-      const errorMsg = error.message || 'Failed to add patient. Please try again.';
-      
-      // Show user-friendly error for auth issues
-      if (errorMsg.includes('Session expired') || errorMsg.includes('sign in') || errorMsg.includes('Authentication token')) {
-        Alert.alert(
-          'Session Expired',
-          'Your session has expired. Please sign in again.',
-          [
-            {
-              text: 'Go to Login',
-              onPress: () => {
-                router.replace('/auth');
-              },
-            },
-          ]
-        );
-      } else if (errorMsg.includes('Guest mode')) {
-        Alert.alert(
-          'Guest Mode',
-          errorMsg,
-          [
-            {
-              text: 'OK',
-              style: 'cancel',
-            },
-            {
-              text: 'Sign In',
-              onPress: () => {
-                router.replace('/auth');
-              },
-            },
-          ]
-        );
-      } else {
-        Alert.alert('Error', errorMsg);
-      }
+      const errorMsg = error.message || 'Failed to add patient to local storage. Please try again.';
+      Alert.alert('Storage Error', errorMsg, [
+        { text: 'Retry', onPress: handleAddPatient },
+        { text: 'Cancel', style: 'cancel' }
+      ]);
     } finally {
       setSaving(false);
     }
@@ -274,14 +195,6 @@ export default function AddPatientScreen() {
 
   const dateText = formatDate(operationDateTime);
 
-  // Debug info text
-  const tokenPresent = !!bearerToken;
-  const userIdPresent = !!user?.id;
-  const tokenStatusText = tokenPresent ? 'yes' : 'no';
-  const userIdStatusText = userIdPresent ? 'yes' : 'no';
-  const guestModeText = isGuest ? 'yes' : 'no';
-  const tokenLengthText = tokenLength > 0 ? `${tokenLength} chars` : 'N/A';
-
   return (
     <SafeAreaView style={styles.safeArea} edges={['top']}>
       <Stack.Screen
@@ -305,48 +218,6 @@ export default function AddPatientScreen() {
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
         >
-          {/* Debug info (preview only) */}
-          {showDebugInfo && __DEV__ && (
-            <View style={styles.debugContainer}>
-              <TouchableOpacity 
-                style={styles.debugHeader}
-                onPress={() => setShowDebugInfo(!showDebugInfo)}
-              >
-                <Text style={styles.debugTitle}>🔍 Auth Debug Info (Preview Only)</Text>
-              </TouchableOpacity>
-              <View style={styles.debugRow}>
-                <Text style={styles.debugLabel}>Token present:</Text>
-                <Text style={[styles.debugValue, tokenPresent ? styles.debugSuccess : styles.debugError]}>
-                  {tokenStatusText}
-                </Text>
-              </View>
-              {tokenPresent && (
-                <View style={styles.debugRow}>
-                  <Text style={styles.debugLabel}>Token length:</Text>
-                  <Text style={styles.debugValue}>{tokenLengthText}</Text>
-                </View>
-              )}
-              <View style={styles.debugRow}>
-                <Text style={styles.debugLabel}>User ID present:</Text>
-                <Text style={[styles.debugValue, userIdPresent ? styles.debugSuccess : styles.debugError]}>
-                  {userIdStatusText}
-                </Text>
-              </View>
-              <View style={styles.debugRow}>
-                <Text style={styles.debugLabel}>Guest mode:</Text>
-                <Text style={[styles.debugValue, isGuest ? styles.debugWarning : styles.debugSuccess]}>
-                  {guestModeText}
-                </Text>
-              </View>
-              {user && (
-                <View style={styles.debugRow}>
-                  <Text style={styles.debugLabel}>User email:</Text>
-                  <Text style={styles.debugValue}>{user.email}</Text>
-                </View>
-              )}
-            </View>
-          )}
-
           <View style={styles.header}>
             <Text style={styles.headerTitle}>New Patient Information</Text>
             <Text style={styles.headerSubtitle}>
@@ -724,47 +595,6 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     paddingBottom: spacing.xxxxl,
-  },
-  debugContainer: {
-    backgroundColor: colors.alertYellowBg,
-    borderWidth: 2,
-    borderColor: colors.alertYellowBorder,
-    borderRadius: borderRadius.md,
-    padding: spacing.md,
-    marginHorizontal: spacing.xl,
-    marginTop: spacing.lg,
-    gap: spacing.sm,
-  },
-  debugHeader: {
-    marginBottom: spacing.xs,
-  },
-  debugTitle: {
-    fontSize: typography.bodySmall,
-    fontWeight: typography.bold,
-    color: colors.alertYellow,
-  },
-  debugRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  debugLabel: {
-    fontSize: typography.caption,
-    fontWeight: typography.medium,
-    color: colors.text,
-  },
-  debugValue: {
-    fontSize: typography.caption,
-    fontWeight: typography.bold,
-  },
-  debugSuccess: {
-    color: colors.alertGreen,
-  },
-  debugError: {
-    color: colors.alertRed,
-  },
-  debugWarning: {
-    color: colors.alertYellow,
   },
   header: {
     paddingHorizontal: spacing.xl,
