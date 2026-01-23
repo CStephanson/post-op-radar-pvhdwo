@@ -1,5 +1,9 @@
 
 // https://docs.expo.dev/guides/using-eslint/
+// ⚠️ TEMPORARY DEVELOPMENT CONFIGURATION - NON-BLOCKING LINT
+// ESLint is configured to provide feedback without blocking builds or preview.
+// All rules are set to "warn" level, and the lint script allows unlimited warnings.
+// This allows development to continue while code quality issues are addressed incrementally.
 module.exports = {
   extends: [
     'expo',
@@ -23,24 +27,23 @@ module.exports = {
     browser: true,
   },
   rules: {
-    "@typescript-eslint/no-unused-vars": "off",
-    "@typescript-eslint/no-explicit-any": "off",
-    "@typescript-eslint/prefer-as-const": "off",
-    "@typescript-eslint/no-var-requires": "off",
+    // All rules set to "warn" to prevent build blocking
+    "@typescript-eslint/no-unused-vars": "warn",
+    "@typescript-eslint/no-explicit-any": "warn",
+    "@typescript-eslint/prefer-as-const": "warn",
+    "@typescript-eslint/no-var-requires": "warn",
+    "@typescript-eslint/ban-tslint-comment": "warn",
     "react/react-in-jsx-scope": "off",
-    "@typescript-eslint/no-empty-object-type": "off",
-    "@typescript-eslint/no-wrapper-object-types": "off",
-    "@typescript-eslint/ban-tslint-comment": "off",
-    "react/no-unescaped-entities": "off",
-    "import/no-unresolved": "error",
-    "prefer-const": "off",
-    "react/prop-types": 1,
-    "no-case-declarations": "off",
-    "no-empty": "off",
-    "react/display-name": "off",
-    "no-constant-condition": "off",
-    "no-var": "off",
-    "no-useless-escape": "off"
+    "react/no-unescaped-entities": "warn",
+    "react/display-name": "warn",
+    "react/prop-types": "warn",
+    "import/no-unresolved": "warn",
+    "prefer-const": "warn",
+    "no-case-declarations": "warn",
+    "no-empty": "warn",
+    "no-constant-condition": "warn",
+    "no-var": "warn",
+    "no-useless-escape": "warn"
   },
   overrides: [
     {

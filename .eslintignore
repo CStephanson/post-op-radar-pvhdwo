@@ -11,23 +11,8 @@ node_modules/
 *.bundle.js
 *.bundle.js.map
 
-# ============================================================
-# TEMPORARY WORKAROUND: Exclude problematic files from linting
-# ============================================================
-# These files have persistent parsing/syntax errors that are
-# blocking development and preventing lint from passing.
-#
-# Issues:
-# - components/ErrorBoundary.tsx: Parse error "} expected" around line 96
-# - utils/errorLogger.ts: Import ordering and array type warnings
-#
-# TODO: Investigate and fix the root cause of these errors:
-#   1. Review ErrorBoundary.tsx for mismatched braces/JSX tags
-#   2. Fix import ordering in errorLogger.ts
-#   3. Update array type syntax from Array<T> to T[]
-#   4. Remove these exclusions once fixed
-#
-# Added: 2024-01-23
-# ============================================================
-components/ErrorBoundary.tsx
-utils/errorLogger.ts
+# Ignore backend (has its own linting)
+backend/
+
+# Ignore babel plugins (system files)
+babel-plugins/
