@@ -1,3 +1,4 @@
+
 import React, { useState } from "react";
 import {
   View,
@@ -12,13 +13,12 @@ import {
   ScrollView,
 } from "react-native";
 import { useAuth } from "@/contexts/AuthContext";
-import { useRouter } from "expo-router";
+import { colors, typography, spacing } from "@/styles/commonStyles";
 
 type Mode = "signin" | "signup";
 
 export default function AuthScreen() {
-  const router = useRouter();
-  const { signInWithEmail, signUpWithEmail, signInWithGoogle, signInWithApple, signInWithGitHub, loading: authLoading } =
+  const { signInWithEmail, signUpWithEmail, signInWithGoogle, signInWithApple, signInAsGuest, loading: authLoading } =
     useAuth();
 
   const [mode, setMode] = useState<Mode>("signin");
@@ -26,58 +26,91 @@ export default function AuthScreen() {
   const [password, setPassword] = useState("");
   const [name, setName] = useState("");
   const [loading, setLoading] = useState(false);
+  const [debugStatus, setDebugStatus] = useState("");
 
   if (authLoading) {
     return (
       <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#007AFF" />
+        <ActivityIndicator size="large" color={colors.primary} />
+        <Text style={styles.debugText}>Checking authentication...</Text>
       </View>
     );
   }
 
   const handleEmailAuth = async () => {
+    console.log('[AuthScreen] Email auth button pressed');
+    
     if (!email || !password) {
       Alert.alert("Error", "Please enter email and password");
       return;
     }
 
     setLoading(true);
+    setDebugStatus("Authenticating...");
+    
     try {
+      console.log('[AuthScreen] Calling auth function for mode:', mode);
+      
       if (mode === "signin") {
         await signInWithEmail(email, password);
-        router.replace("/profile-setup");
+        setDebugStatus("Login successful! Navigating...");
       } else {
         await signUpWithEmail(email, password, name);
-        Alert.alert(
-          "Success",
-          "Account created! Please check your email to verify your account."
-        );
-        router.replace("/profile-setup");
+        setDebugStatus("Sign up successful! Navigating...");
       }
+      
+      console.log('[AuthScreen] Auth function completed');
     } catch (error: any) {
+      console.error('[AuthScreen] Auth error:', error);
+      setDebugStatus("Error: " + (error.message || "Authentication failed"));
       Alert.alert("Error", error.message || "Authentication failed");
     } finally {
       setLoading(false);
     }
   };
 
-  const handleSocialAuth = async (provider: "google" | "apple" | "github") => {
+  const handleSocialAuth = async (provider: "google" | "apple") => {
+    console.log('[AuthScreen] Social auth button pressed:', provider);
     setLoading(true);
+    setDebugStatus(`Signing in with ${provider}...`);
+    
     try {
       if (provider === "google") {
         await signInWithGoogle();
       } else if (provider === "apple") {
         await signInWithApple();
-      } else if (provider === "github") {
-        await signInWithGitHub();
       }
-      router.replace("/profile-setup");
+      setDebugStatus("Social login successful! Navigating...");
     } catch (error: any) {
+      console.error('[AuthScreen] Social auth error:', error);
+      setDebugStatus("Error: " + (error.message || "Authentication failed"));
       Alert.alert("Error", error.message || "Authentication failed");
     } finally {
       setLoading(false);
     }
   };
+
+  const handleGuestSignIn = async () => {
+    console.log('[AuthScreen] Guest sign in button pressed');
+    setLoading(true);
+    setDebugStatus("Signing in as guest...");
+    
+    try {
+      await signInAsGuest();
+      setDebugStatus("Guest login successful! Navigating...");
+    } catch (error: any) {
+      console.error('[AuthScreen] Guest sign in error:', error);
+      setDebugStatus("Error: " + (error.message || "Guest sign in failed"));
+      Alert.alert("Error", error.message || "Guest sign in failed");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const modeLabel = mode === "signin" ? "Sign In" : "Sign Up";
+  const switchModeText = mode === "signin"
+    ? "Don't have an account? Sign Up"
+    : "Already have an account? Sign In";
 
   return (
     <KeyboardAvoidingView
@@ -86,9 +119,8 @@ export default function AuthScreen() {
     >
       <ScrollView contentContainerStyle={styles.scrollContent}>
         <View style={styles.content}>
-          <Text style={styles.title}>
-            {mode === "signin" ? "Sign In" : "Sign Up"}
-          </Text>
+          <Text style={styles.title}>Post-Op Radar</Text>
+          <Text style={styles.subtitle}>{modeLabel}</Text>
 
           {mode === "signup" && (
             <TextInput
@@ -97,6 +129,7 @@ export default function AuthScreen() {
               value={name}
               onChangeText={setName}
               autoCapitalize="words"
+              editable={!loading}
             />
           )}
 
@@ -108,6 +141,7 @@ export default function AuthScreen() {
             keyboardType="email-address"
             autoCapitalize="none"
             autoCorrect={false}
+            editable={!loading}
           />
 
           <TextInput
@@ -117,6 +151,7 @@ export default function AuthScreen() {
             onChangeText={setPassword}
             secureTextEntry
             autoCapitalize="none"
+            editable={!loading}
           />
 
           <TouchableOpacity
@@ -127,21 +162,20 @@ export default function AuthScreen() {
             {loading ? (
               <ActivityIndicator color="#fff" />
             ) : (
-              <Text style={styles.primaryButtonText}>
-                {mode === "signin" ? "Sign In" : "Sign Up"}
-              </Text>
+              <Text style={styles.primaryButtonText}>{modeLabel}</Text>
             )}
           </TouchableOpacity>
+
+          {debugStatus ? (
+            <Text style={styles.debugText}>{debugStatus}</Text>
+          ) : null}
 
           <TouchableOpacity
             style={styles.switchModeButton}
             onPress={() => setMode(mode === "signin" ? "signup" : "signin")}
+            disabled={loading}
           >
-            <Text style={styles.switchModeText}>
-              {mode === "signin"
-                ? "Don't have an account? Sign Up"
-                : "Already have an account? Sign In"}
-            </Text>
+            <Text style={styles.switchModeText}>{switchModeText}</Text>
           </TouchableOpacity>
 
           <View style={styles.divider}>
@@ -169,6 +203,18 @@ export default function AuthScreen() {
               </Text>
             </TouchableOpacity>
           )}
+
+          <TouchableOpacity
+            style={styles.guestButton}
+            onPress={handleGuestSignIn}
+            disabled={loading}
+          >
+            <Text style={styles.guestButtonText}>Continue as Guest</Text>
+          </TouchableOpacity>
+
+          <Text style={styles.disclaimer}>
+            For educational and demonstration purposes only.
+          </Text>
         </View>
       </ScrollView>
     </KeyboardAvoidingView>
@@ -178,46 +224,54 @@ export default function AuthScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#fff",
+    backgroundColor: colors.background,
   },
   loadingContainer: {
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
-    backgroundColor: "#fff",
+    backgroundColor: colors.background,
   },
   scrollContent: {
     flexGrow: 1,
   },
   content: {
     flex: 1,
-    padding: 24,
+    padding: spacing.xl,
     justifyContent: "center",
   },
   title: {
     fontSize: 32,
     fontWeight: "bold",
-    marginBottom: 32,
+    marginBottom: spacing.xs,
     textAlign: "center",
-    color: "#000",
+    color: colors.text,
+  },
+  subtitle: {
+    fontSize: 24,
+    fontWeight: "600",
+    marginBottom: spacing.xl,
+    textAlign: "center",
+    color: colors.text,
   },
   input: {
     height: 50,
     borderWidth: 1,
-    borderColor: "#ddd",
+    borderColor: colors.border,
     borderRadius: 8,
-    paddingHorizontal: 16,
-    marginBottom: 16,
+    paddingHorizontal: spacing.md,
+    marginBottom: spacing.md,
     fontSize: 16,
-    backgroundColor: "#fff",
+    backgroundColor: colors.card,
+    color: colors.text,
   },
   primaryButton: {
     height: 50,
-    backgroundColor: "#007AFF",
+    backgroundColor: colors.primary,
     borderRadius: 8,
     justifyContent: "center",
     alignItems: "center",
-    marginTop: 8,
+    marginTop: spacing.sm,
   },
   primaryButtonText: {
     color: "#fff",
@@ -227,42 +281,49 @@ const styles = StyleSheet.create({
   buttonDisabled: {
     opacity: 0.6,
   },
+  debugText: {
+    marginTop: spacing.md,
+    textAlign: "center",
+    color: colors.primary,
+    fontSize: 14,
+    fontWeight: "500",
+  },
   switchModeButton: {
-    marginTop: 16,
+    marginTop: spacing.md,
     alignItems: "center",
   },
   switchModeText: {
-    color: "#007AFF",
+    color: colors.primary,
     fontSize: 14,
   },
   divider: {
     flexDirection: "row",
     alignItems: "center",
-    marginVertical: 24,
+    marginVertical: spacing.lg,
   },
   dividerLine: {
     flex: 1,
     height: 1,
-    backgroundColor: "#ddd",
+    backgroundColor: colors.border,
   },
   dividerText: {
-    marginHorizontal: 12,
-    color: "#666",
+    marginHorizontal: spacing.md,
+    color: colors.textSecondary,
     fontSize: 14,
   },
   socialButton: {
     height: 50,
     borderWidth: 1,
-    borderColor: "#ddd",
+    borderColor: colors.border,
     borderRadius: 8,
     justifyContent: "center",
     alignItems: "center",
-    marginBottom: 12,
-    backgroundColor: "#fff",
+    marginBottom: spacing.md,
+    backgroundColor: colors.card,
   },
   socialButtonText: {
     fontSize: 16,
-    color: "#000",
+    color: colors.text,
     fontWeight: "500",
   },
   appleButton: {
@@ -271,5 +332,27 @@ const styles = StyleSheet.create({
   },
   appleButtonText: {
     color: "#fff",
+  },
+  guestButton: {
+    height: 50,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 8,
+    justifyContent: "center",
+    alignItems: "center",
+    marginTop: spacing.sm,
+    backgroundColor: "transparent",
+  },
+  guestButtonText: {
+    fontSize: 16,
+    color: colors.textSecondary,
+    fontWeight: "500",
+  },
+  disclaimer: {
+    marginTop: spacing.xl,
+    textAlign: "center",
+    color: colors.textSecondary,
+    fontSize: 12,
+    fontStyle: "italic",
   },
 });

@@ -22,7 +22,7 @@ import * as ImagePicker from 'expo-image-picker';
 type UserRole = 'medical_student' | 'resident' | 'fellow' | 'staff_physician';
 
 export default function ProfileSetupScreen() {
-  console.log('ProfileSetupScreen rendered');
+  console.log('[ProfileSetup] Screen rendered');
   const router = useRouter();
   const { user } = useAuth();
   
@@ -106,13 +106,13 @@ export default function ProfileSetupScreen() {
       setIsEditing(true);
     } catch (error: any) {
       // Profile doesn't exist yet, that's okay
-      console.log('No existing profile found, creating new one');
+      console.log('[ProfileSetup] No existing profile found, creating new one');
       setIsEditing(false);
     }
   };
 
   const pickImage = async () => {
-    console.log('User tapped pick image button');
+    console.log('[ProfileSetup] User tapped pick image button');
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
       allowsEditing: true,
@@ -126,7 +126,7 @@ export default function ProfileSetupScreen() {
   };
 
   const handleSave = async (shouldNavigate: boolean = true) => {
-    console.log('Saving profile, shouldNavigate:', shouldNavigate);
+    console.log('[ProfileSetup] Saving profile, shouldNavigate:', shouldNavigate);
     
     setLoading(true);
     
@@ -144,7 +144,7 @@ export default function ProfileSetupScreen() {
         profilePicture: profilePicture || '',
       };
       
-      console.log('Saving ALL profile fields:', profileData);
+      console.log('[ProfileSetup] Saving ALL profile fields:', profileData);
       
       // Single atomic update - either all fields save or it fails
       if (isEditing) {
@@ -154,7 +154,7 @@ export default function ProfileSetupScreen() {
       }
       
       // Re-fetch the saved record to ensure UI matches persisted data
-      console.log('Re-fetching saved profile to sync state');
+      console.log('[ProfileSetup] Re-fetching saved profile to sync state');
       const savedProfile = await authenticatedGet<any>('/api/profile');
       
       // Update local state with canonical version from storage
@@ -182,15 +182,41 @@ export default function ProfileSetupScreen() {
       
       // Navigate after save completes (if requested)
       if (shouldNavigate) {
+        console.log('[ProfileSetup] Navigating to dashboard after save');
         router.replace('/(tabs)/(home)/');
       }
     } catch (error: any) {
-      console.error('Error saving profile:', error);
+      console.error('[ProfileSetup] Error saving profile:', error);
       // Show clear error feedback - do not silently drop fields
       Alert.alert('Error', error.message || 'Failed to save profile. Please try again.');
       throw error; // Re-throw so useUnsavedChanges knows save failed
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleSkip = () => {
+    console.log('[ProfileSetup] User clicked Skip for now');
+    
+    if (hasUnsavedChanges) {
+      Alert.alert(
+        'Skip Profile Setup?',
+        'You have unsaved changes. Are you sure you want to skip?',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Skip',
+            style: 'destructive',
+            onPress: () => {
+              console.log('[ProfileSetup] Skipping to dashboard');
+              router.replace('/(tabs)/(home)/');
+            },
+          },
+        ]
+      );
+    } else {
+      console.log('[ProfileSetup] Skipping to dashboard (no changes)');
+      router.replace('/(tabs)/(home)/');
     }
   };
 
@@ -233,7 +259,7 @@ export default function ProfileSetupScreen() {
         <View style={styles.header}>
           <Text style={styles.title}>{isEditing ? 'Edit Your Profile' : 'Complete Your Profile'}</Text>
           <Text style={styles.subtitle}>
-            Help us personalize your Post-Op Radar experience
+            Help us personalize your Post-Op Radar experience (optional)
           </Text>
         </View>
 
@@ -261,7 +287,7 @@ export default function ProfileSetupScreen() {
 
         {/* Full Name */}
         <View style={styles.section}>
-          <Text style={styles.label}>Full Name *</Text>
+          <Text style={styles.label}>Full Name</Text>
           <TextInput
             style={styles.input}
             value={fullName}
@@ -285,7 +311,7 @@ export default function ProfileSetupScreen() {
 
         {/* Role */}
         <View style={styles.section}>
-          <Text style={styles.label}>Role / Training Level *</Text>
+          <Text style={styles.label}>Role / Training Level</Text>
           <View style={styles.roleGrid}>
             <TouchableOpacity
               style={[styles.roleButton, role === 'medical_student' && styles.roleButtonActive]}
@@ -380,6 +406,17 @@ export default function ProfileSetupScreen() {
             <Text style={styles.saveButtonText}>{isEditing ? 'Save Changes' : 'Complete Setup'}</Text>
           )}
         </TouchableOpacity>
+
+        {/* Skip Button */}
+        {!isEditing && (
+          <TouchableOpacity
+            style={styles.skipButton}
+            onPress={handleSkip}
+            disabled={isSaving}
+          >
+            <Text style={styles.skipButtonText}>Skip for now</Text>
+          </TouchableOpacity>
+        )}
 
         <View style={styles.bottomSpacer} />
       </ScrollView>
@@ -507,6 +544,18 @@ const styles = StyleSheet.create({
     fontSize: typography.body,
     fontWeight: typography.bold,
     color: '#FFFFFF',
+  },
+  skipButton: {
+    backgroundColor: 'transparent',
+    borderRadius: borderRadius.md,
+    paddingVertical: spacing.lg,
+    alignItems: 'center',
+    marginTop: spacing.md,
+  },
+  skipButtonText: {
+    fontSize: typography.body,
+    fontWeight: typography.semibold,
+    color: colors.textSecondary,
   },
   bottomSpacer: {
     height: spacing.xxxxl,
