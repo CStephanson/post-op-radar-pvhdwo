@@ -93,7 +93,7 @@ export default function RootLayout() {
       <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#fff' }}>
         <ActivityIndicator size="large" color="#007AFF" />
         <Text style={{ fontSize: 18, fontWeight: '600', marginTop: 16, color: '#000' }}>
-          Loading Post-Op Radar...
+          Loading OpMGMT...
         </Text>
         <Text style={{ fontSize: 14, color: '#666', marginTop: 8 }}>
           Initializing app
