@@ -127,27 +127,9 @@ export default function HomeScreen() {
     router.push(`/patient/${patientId}`);
   };
 
-  const handleAddPatient = async () => {
-    console.log('User tapped add patient button');
-    
-    try {
-      const { authenticatedPost } = await import('@/utils/api');
-      
-      const newPatientData = {
-        name: 'New Patient',
-        procedureType: 'Procedure Type',
-        postOpDay: 1,
-        alertStatus: 'green',
-      };
-      
-      console.log('Creating new patient:', newPatientData);
-      const newPatient = await authenticatedPost<any>('/api/patients', newPatientData);
-      
-      router.push(`/patient-info/${newPatient.id}`);
-    } catch (error: any) {
-      console.error('Error creating patient:', error);
-      Alert.alert('Error', error.message || 'Failed to create patient');
-    }
+  const handleAddPatient = () => {
+    console.log('Opening Add Patient screen...');
+    router.push('/add-patient');
   };
 
   const getAlertColor = (status: AlertStatus) => {
