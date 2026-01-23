@@ -33,19 +33,9 @@ export default function ProfileScreen() {
     console.log('Loading user profile');
     setLoading(true);
     try {
-      // TODO: Backend Integration - GET /api/profile
-      // For now, use mock data
-      setProfile({
-        id: '1',
-        userId: user?.id || '',
-        fullName: user?.name || 'User',
-        pronouns: 'they/them',
-        role: 'medical_student',
-        roleYear: 3,
-        affiliation: 'Johns Hopkins Hospital',
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      });
+      const { authenticatedGet } = await import('@/utils/api');
+      const profileData = await authenticatedGet<any>('/api/profile');
+      setProfile(profileData);
     } catch (error) {
       console.error('Error loading profile:', error);
     } finally {
@@ -119,19 +109,17 @@ export default function ProfileScreen() {
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
       >
-        {/* Header */}
         <View style={styles.header}>
           <Text style={styles.headerTitle}>Profile</Text>
         </View>
 
-        {/* Profile Card */}
         <View style={styles.profileCard}>
           <View style={styles.avatarContainer}>
             <View style={styles.avatar}>
               <IconSymbol
                 ios_icon_name="person.fill"
                 android_material_icon_name="person"
-                size={48}
+                size={44}
                 color={colors.primary}
               />
             </View>
@@ -147,14 +135,13 @@ export default function ProfileScreen() {
             <IconSymbol
               ios_icon_name="pencil"
               android_material_icon_name="edit"
-              size={16}
+              size={14}
               color={colors.primary}
             />
             <Text style={styles.editButtonText}>Edit Profile</Text>
           </TouchableOpacity>
         </View>
 
-        {/* Information Sections */}
         {profile && (
           <>
             <View style={styles.section}>
@@ -165,7 +152,7 @@ export default function ProfileScreen() {
                   <IconSymbol
                     ios_icon_name="briefcase.fill"
                     android_material_icon_name="work"
-                    size={20}
+                    size={18}
                     color={colors.iconSecondary}
                   />
                 </View>
@@ -181,7 +168,7 @@ export default function ProfileScreen() {
                     <IconSymbol
                       ios_icon_name="building.2.fill"
                       android_material_icon_name="business"
-                      size={20}
+                      size={18}
                       color={colors.iconSecondary}
                     />
                   </View>
@@ -195,12 +182,11 @@ export default function ProfileScreen() {
           </>
         )}
 
-        {/* Disclaimer */}
         <View style={styles.disclaimerCard}>
           <IconSymbol
             ios_icon_name="info.circle"
             android_material_icon_name="info"
-            size={20}
+            size={18}
             color={colors.textLight}
             style={styles.disclaimerIcon}
           />
@@ -213,12 +199,11 @@ export default function ProfileScreen() {
           </View>
         </View>
 
-        {/* Sign Out Button */}
         <TouchableOpacity style={styles.signOutButton} onPress={handleSignOut}>
           <IconSymbol
             ios_icon_name="arrow.right.square"
             android_material_icon_name="logout"
-            size={20}
+            size={18}
             color={colors.error}
           />
           <Text style={styles.signOutButtonText}>Sign Out</Text>
@@ -249,22 +234,22 @@ const styles = StyleSheet.create({
   header: {
     backgroundColor: colors.backgroundAlt,
     paddingHorizontal: spacing.xl,
-    paddingTop: spacing.md,
+    paddingTop: spacing.md - 2,
     paddingBottom: spacing.md,
     borderBottomWidth: 1,
     borderBottomColor: colors.borderLight,
   },
   headerTitle: {
-    fontSize: typography.h3,
-    fontWeight: typography.semibold,
+    fontSize: typography.h2,
+    fontWeight: typography.bold,
     color: colors.text,
-    letterSpacing: -0.3,
+    letterSpacing: -0.4,
   },
   profileCard: {
     backgroundColor: colors.backgroundAlt,
     marginHorizontal: spacing.xl,
-    marginTop: spacing.xl,
-    padding: spacing.xxl,
+    marginTop: spacing.xxl,
+    padding: spacing.xxl + spacing.xs,
     borderRadius: borderRadius.lg,
     alignItems: 'center',
     borderWidth: 1,
@@ -272,12 +257,12 @@ const styles = StyleSheet.create({
     ...shadows.sm,
   },
   avatarContainer: {
-    marginBottom: spacing.lg,
+    marginBottom: spacing.lg + spacing.xs,
   },
   avatar: {
-    width: 96,
-    height: 96,
-    borderRadius: 48,
+    width: 88,
+    height: 88,
+    borderRadius: 44,
     backgroundColor: colors.borderLight,
     justifyContent: 'center',
     alignItems: 'center',
@@ -288,6 +273,7 @@ const styles = StyleSheet.create({
     color: colors.text,
     marginBottom: spacing.xs,
     textAlign: 'center',
+    letterSpacing: -0.3,
   },
   pronouns: {
     fontSize: typography.bodySmall,
@@ -299,7 +285,7 @@ const styles = StyleSheet.create({
     fontSize: typography.body,
     fontWeight: typography.regular,
     color: colors.textLight,
-    marginBottom: spacing.lg,
+    marginBottom: spacing.lg + spacing.xs,
   },
   editButton: {
     flexDirection: 'row',
@@ -317,11 +303,11 @@ const styles = StyleSheet.create({
   },
   section: {
     marginHorizontal: spacing.xl,
-    marginTop: spacing.xxl,
+    marginTop: spacing.xxl + spacing.sm,
   },
   sectionTitle: {
     fontSize: typography.h4,
-    fontWeight: typography.semibold,
+    fontWeight: typography.bold,
     color: colors.text,
     marginBottom: spacing.lg,
     letterSpacing: -0.2,
@@ -347,7 +333,7 @@ const styles = StyleSheet.create({
     fontSize: typography.caption,
     fontWeight: typography.medium,
     color: colors.textLight,
-    marginBottom: spacing.xs,
+    marginBottom: spacing.xs - 1,
   },
   infoValue: {
     fontSize: typography.body,
@@ -360,13 +346,14 @@ const styles = StyleSheet.create({
     alignItems: 'flex-start',
     backgroundColor: colors.borderLight,
     marginHorizontal: spacing.xl,
-    marginTop: spacing.xxl,
+    marginTop: spacing.xxl + spacing.sm,
     padding: spacing.lg,
     borderRadius: borderRadius.md,
   },
   disclaimerIcon: {
     marginRight: spacing.md,
-    marginTop: 2,
+    marginTop: 1,
+    opacity: 0.7,
   },
   disclaimerContent: {
     flex: 1,
@@ -390,7 +377,7 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
     backgroundColor: colors.backgroundAlt,
     marginHorizontal: spacing.xl,
-    marginTop: spacing.xl,
+    marginTop: spacing.xl + spacing.sm,
     paddingVertical: spacing.lg,
     borderRadius: borderRadius.md,
     borderWidth: 2,

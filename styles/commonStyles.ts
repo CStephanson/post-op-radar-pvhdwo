@@ -2,19 +2,22 @@
 import { StyleSheet, ViewStyle, TextStyle } from 'react-native';
 
 // Refined color scheme - distinctive yet calm, professional, and clinically credible
+// Moving beyond neutral hospital palette with controlled pops of color
 export const colors = {
-  // Primary colors - sophisticated teal with depth
-  primary: '#0D9488',        // Teal-600 - distinctive yet professional
-  primaryDark: '#0F766E',    // Teal-700 - deeper accent
-  primaryLight: '#14B8A6',   // Teal-500 - lighter accent
+  // Primary colors - sophisticated teal with depth (distinctive identity)
+  primary: '#0891B2',        // Cyan-600 - fresh, clinical, distinctive
+  primaryDark: '#0E7490',    // Cyan-700 - deeper accent
+  primaryLight: '#06B6D4',   // Cyan-500 - lighter accent
+  primarySubtle: '#CFFAFE',  // Cyan-100 - very subtle tint
   
   // Secondary colors - warm slate for contrast
-  secondary: '#475569',      // Slate-600
-  secondaryDark: '#334155',  // Slate-700
+  secondary: '#64748B',      // Slate-500 - balanced neutral
+  secondaryDark: '#475569',  // Slate-600 - deeper neutral
   
-  // Accent colors - controlled pops of color
-  accent: '#06B6D4',         // Cyan-500 - fresh, clinical
+  // Accent colors - controlled pops of color for personality
+  accent: '#8B5CF6',         // Violet-500 - distinctive, professional
   accentWarm: '#F59E0B',     // Amber-500 - warm highlight
+  accentCool: '#3B82F6',     // Blue-500 - cool highlight
   
   // Backgrounds - calm, breathable
   background: '#F8FAFC',     // Slate-50 - very light, airy
@@ -24,14 +27,14 @@ export const colors = {
   
   // Text - clear hierarchy with warmth
   text: '#0F172A',           // Slate-900 - deep, readable
-  textSecondary: '#475569',  // Slate-600 - medium gray
+  textSecondary: '#64748B',  // Slate-500 - medium gray
   textLight: '#94A3B8',      // Slate-400 - light gray
   textMuted: '#CBD5E1',      // Slate-300 - very light
   
   // Alert status colors - integrated into the color system
-  alertGreen: '#059669',     // Emerald-600 - calm, reassuring
+  alertGreen: '#10B981',     // Emerald-500 - calm, reassuring
   alertYellow: '#F59E0B',    // Amber-500 - warm, attentive
-  alertRed: '#DC2626',       // Red-600 - clear, not alarming
+  alertRed: '#EF4444',       // Red-500 - clear, not alarming
   
   // Alert backgrounds - soft, integrated
   alertGreenBg: '#ECFDF5',   // Emerald-50
@@ -39,9 +42,9 @@ export const colors = {
   alertRedBg: '#FEF2F2',     // Red-50
   
   // Alert borders - subtle definition
-  alertGreenBorder: '#A7F3D0',  // Emerald-200
-  alertYellowBorder: '#FDE68A', // Amber-200
-  alertRedBorder: '#FECACA',    // Red-200
+  alertGreenBorder: '#86EFAC',  // Emerald-300
+  alertYellowBorder: '#FCD34D', // Amber-300
+  alertRedBorder: '#FCA5A5',    // Red-300
   
   // Borders and dividers - refined, minimal
   border: '#E2E8F0',         // Slate-200
@@ -49,28 +52,29 @@ export const colors = {
   divider: '#CBD5E1',        // Slate-300
   
   // Functional colors
-  success: '#059669',        // Emerald-600
+  success: '#10B981',        // Emerald-500
   warning: '#F59E0B',        // Amber-500
-  error: '#DC2626',          // Red-600
+  error: '#EF4444',          // Red-500
   info: '#0891B2',           // Cyan-600
   
   // Icon colors - integrated palette
-  iconPrimary: '#0D9488',    // Teal-600
+  iconPrimary: '#0891B2',    // Cyan-600
   iconSecondary: '#64748B',  // Slate-500
   iconLight: '#94A3B8',      // Slate-400
   
   // Special highlights
   highlight: '#FEF3C7',      // Amber-100 - for "last viewed" badge
   highlightBorder: '#FCD34D', // Amber-300
+  highlightText: '#D97706',  // Amber-600
 };
 
 export const typography = {
-  // Font sizes - refined hierarchy
+  // Font sizes - refined hierarchy with better distinction
   h1: 28,
   h2: 22,
-  h3: 19,
-  h4: 17,
-  h5: 16,
+  h3: 18,
+  h4: 16,
+  h5: 15,
   body: 15,
   bodySmall: 14,
   caption: 13,

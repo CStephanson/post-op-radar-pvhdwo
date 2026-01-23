@@ -222,8 +222,8 @@ export default function HomeScreen() {
                 <IconSymbol
                   ios_icon_name="info.circle.fill"
                   android_material_icon_name="info"
-                  size={12}
-                  color={colors.textLight}
+                  size={10}
+                  color={colors.textMuted}
                 />
                 <Text style={styles.disclaimerText}>Educational use only</Text>
               </View>
@@ -236,7 +236,7 @@ export default function HomeScreen() {
               <IconSymbol
                 ios_icon_name="person.circle.fill"
                 android_material_icon_name="account-circle"
-                size={36}
+                size={28}
                 color={colors.primary}
               />
             </TouchableOpacity>
@@ -263,7 +263,7 @@ export default function HomeScreen() {
               <IconSymbol
                 ios_icon_name="arrow.up.arrow.down"
                 android_material_icon_name="sort"
-                size={16}
+                size={14}
                 color={colors.iconSecondary}
               />
               <Text style={styles.sortButtonText}>{currentSortLabel}</Text>
@@ -278,25 +278,26 @@ export default function HomeScreen() {
                 const isActive = sortBy === option;
                 
                 return (
-                  <TouchableOpacity
-                    key={index}
-                    style={[styles.sortMenuItem, isActive && styles.sortMenuItemActive]}
-                    onPress={() => {
-                      console.log('User selected sort option:', option);
-                      setSortBy(option);
-                      setShowSortMenu(false);
-                    }}
-                  >
-                    <IconSymbol
-                      ios_icon_name="checkmark"
-                      android_material_icon_name={icon}
-                      size={18}
-                      color={isActive ? colors.primary : colors.iconLight}
-                    />
-                    <Text style={[styles.sortMenuItemText, isActive && styles.sortMenuItemTextActive]}>
-                      {label}
-                    </Text>
-                  </TouchableOpacity>
+                  <React.Fragment key={index}>
+                    <TouchableOpacity
+                      style={[styles.sortMenuItem, isActive && styles.sortMenuItemActive]}
+                      onPress={() => {
+                        console.log('User selected sort option:', option);
+                        setSortBy(option);
+                        setShowSortMenu(false);
+                      }}
+                    >
+                      <IconSymbol
+                        ios_icon_name="checkmark"
+                        android_material_icon_name={icon}
+                        size={18}
+                        color={isActive ? colors.primary : colors.iconLight}
+                      />
+                      <Text style={[styles.sortMenuItemText, isActive && styles.sortMenuItemTextActive]}>
+                        {label}
+                      </Text>
+                    </TouchableOpacity>
+                  </React.Fragment>
                 );
               })}
             </View>
@@ -347,80 +348,81 @@ export default function HomeScreen() {
                 const isLastOpened = patient.id === lastOpenedPatientId;
 
                 return (
-                  <TouchableOpacity
-                    key={index}
-                    style={[
-                      styles.patientCard,
-                      isLastOpened && styles.patientCardLastOpened,
-                    ]}
-                    onPress={() => handlePatientPress(patient.id)}
-                    activeOpacity={0.7}
-                  >
-                    {isLastOpened && (
-                      <View style={styles.lastOpenedBadge}>
-                        <IconSymbol
-                          ios_icon_name="clock.fill"
-                          android_material_icon_name="access-time"
-                          size={12}
-                          color={colors.accentWarm}
-                        />
-                        <Text style={styles.lastOpenedText}>Last viewed</Text>
-                      </View>
-                    )}
-
-                    <View style={[styles.alertBar, { 
-                      backgroundColor: alertBgColor,
-                      borderLeftColor: alertColor,
-                    }]}>
-                      <IconSymbol
-                        ios_icon_name="circle.fill"
-                        android_material_icon_name={alertIcon}
-                        size={12}
-                        color={alertColor}
-                      />
-                      <Text style={[styles.alertLabel, { color: alertColor }]}>
-                        {alertLabel}
-                      </Text>
-                      {isManualStatus && (
-                        <View style={styles.manualBadge}>
-                          <Text style={styles.manualBadgeText}>MANUAL</Text>
+                  <React.Fragment key={index}>
+                    <TouchableOpacity
+                      style={[
+                        styles.patientCard,
+                        isLastOpened && styles.patientCardLastOpened,
+                      ]}
+                      onPress={() => handlePatientPress(patient.id)}
+                      activeOpacity={0.7}
+                    >
+                      {isLastOpened && (
+                        <View style={styles.lastOpenedBadge}>
+                          <IconSymbol
+                            ios_icon_name="clock.fill"
+                            android_material_icon_name="access-time"
+                            size={10}
+                            color={colors.highlightText}
+                          />
+                          <Text style={styles.lastOpenedText}>Last viewed</Text>
                         </View>
                       )}
-                    </View>
 
-                    <View style={styles.cardContent}>
-                      <View style={styles.patientInfo}>
-                        <Text style={styles.patientName}>{displayName}</Text>
-                        
-                        <View style={styles.metaRow}>
-                          <View style={styles.podBadge}>
-                            <Text style={styles.podText}>{podText}</Text>
+                      <View style={[styles.alertBar, { 
+                        backgroundColor: alertBgColor,
+                        borderLeftColor: alertColor,
+                      }]}>
+                        <IconSymbol
+                          ios_icon_name="circle.fill"
+                          android_material_icon_name={alertIcon}
+                          size={10}
+                          color={alertColor}
+                        />
+                        <Text style={[styles.alertLabel, { color: alertColor }]}>
+                          {alertLabel}
+                        </Text>
+                        {isManualStatus && (
+                          <View style={styles.manualBadge}>
+                            <Text style={styles.manualBadgeText}>MANUAL</Text>
                           </View>
-                          {patient.hospitalLocation && (
-                            <View style={styles.locationBadge}>
-                              <IconSymbol
-                                ios_icon_name="location"
-                                android_material_icon_name="location-on"
-                                size={11}
-                                color={colors.textLight}
-                              />
-                              <Text style={styles.locationText}>{patient.hospitalLocation}</Text>
-                            </View>
-                          )}
-                        </View>
-                        
-                        <Text style={styles.procedureType}>{patient.procedureType}</Text>
+                        )}
                       </View>
 
-                      <IconSymbol
-                        ios_icon_name="chevron.right"
-                        android_material_icon_name="chevron-right"
-                        size={20}
-                        color={colors.iconLight}
-                        style={styles.chevron}
-                      />
-                    </View>
-                  </TouchableOpacity>
+                      <View style={styles.cardContent}>
+                        <View style={styles.patientInfo}>
+                          <Text style={styles.patientName}>{displayName}</Text>
+                          
+                          <View style={styles.metaRow}>
+                            <View style={styles.podBadge}>
+                              <Text style={styles.podText}>{podText}</Text>
+                            </View>
+                            {patient.hospitalLocation && (
+                              <View style={styles.locationBadge}>
+                                <IconSymbol
+                                  ios_icon_name="location"
+                                  android_material_icon_name="location-on"
+                                  size={9}
+                                  color={colors.textMuted}
+                                />
+                                <Text style={styles.locationText}>{patient.hospitalLocation}</Text>
+                              </View>
+                            )}
+                          </View>
+                          
+                          <Text style={styles.procedureType}>{patient.procedureType}</Text>
+                        </View>
+
+                        <IconSymbol
+                          ios_icon_name="chevron.right"
+                          android_material_icon_name="chevron-right"
+                          size={16}
+                          color={colors.iconLight}
+                          style={styles.chevron}
+                        />
+                      </View>
+                    </TouchableOpacity>
+                  </React.Fragment>
                 );
               })}
 
@@ -462,27 +464,28 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: spacing.xl,
-    paddingVertical: spacing.md,
+    paddingVertical: spacing.md - 2,
   },
   headerLeft: {
     flex: 1,
-    gap: spacing.xs,
+    gap: spacing.xs - 3,
   },
   headerTitle: {
-    fontSize: typography.h4,
-    fontWeight: typography.bold,
+    fontSize: typography.h5,
+    fontWeight: typography.semibold,
     color: colors.text,
-    letterSpacing: -0.2,
+    letterSpacing: -0.1,
   },
   disclaimerBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: spacing.xs,
+    gap: spacing.xs - 3,
   },
   disclaimerText: {
-    fontSize: typography.tiny,
+    fontSize: typography.tiny - 2,
     fontWeight: typography.medium,
-    color: colors.textLight,
+    color: colors.textMuted,
+    letterSpacing: 0.1,
   },
   profileButton: {
     marginLeft: spacing.md,
@@ -491,14 +494,14 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   scrollContent: {
-    paddingTop: spacing.xxl,
+    paddingTop: spacing.xxl + spacing.sm,
   },
   listHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: spacing.xl,
-    marginBottom: spacing.lg,
+    marginBottom: spacing.lg + spacing.xs,
   },
   listHeaderLeft: {
     flexDirection: 'row',
@@ -506,37 +509,37 @@ const styles = StyleSheet.create({
     gap: spacing.md,
   },
   listTitle: {
-    fontSize: typography.h3,
+    fontSize: typography.h2,
     fontWeight: typography.bold,
     color: colors.text,
-    letterSpacing: -0.3,
+    letterSpacing: -0.4,
   },
   countBadge: {
     backgroundColor: colors.primary,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.xs,
+    paddingHorizontal: spacing.md - 2,
+    paddingVertical: spacing.xs - 3,
     borderRadius: borderRadius.full,
-    minWidth: 32,
+    minWidth: 26,
     alignItems: 'center',
   },
   patientCount: {
-    fontSize: typography.caption,
+    fontSize: typography.caption - 1,
     fontWeight: typography.bold,
     color: '#FFFFFF',
   },
   sortButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: spacing.xs,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
+    gap: spacing.xs - 1,
+    paddingHorizontal: spacing.md - 2,
+    paddingVertical: spacing.sm - 1,
     backgroundColor: colors.backgroundAlt,
     borderRadius: borderRadius.md,
     borderWidth: 1,
     borderColor: colors.border,
   },
   sortButtonText: {
-    fontSize: typography.caption,
+    fontSize: typography.caption - 1,
     fontWeight: typography.semibold,
     color: colors.textSecondary,
   },
@@ -555,12 +558,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: spacing.md,
     paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.md,
+    paddingVertical: spacing.md + 2,
     borderBottomWidth: 1,
     borderBottomColor: colors.borderLight,
   },
   sortMenuItemActive: {
-    backgroundColor: colors.borderLight,
+    backgroundColor: colors.primarySubtle,
   },
   sortMenuItemText: {
     fontSize: typography.body,
@@ -630,7 +633,7 @@ const styles = StyleSheet.create({
   patientCard: {
     backgroundColor: colors.card,
     marginHorizontal: spacing.xl,
-    marginBottom: spacing.lg,
+    marginBottom: spacing.lg + spacing.xs,
     borderRadius: borderRadius.lg,
     borderWidth: 1,
     borderColor: colors.border,
@@ -646,108 +649,108 @@ const styles = StyleSheet.create({
   lastOpenedBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: spacing.xs,
+    gap: spacing.xs - 3,
     paddingHorizontal: spacing.lg,
-    paddingTop: spacing.sm,
-    paddingBottom: spacing.xs,
+    paddingTop: spacing.sm - 1,
+    paddingBottom: spacing.xs - 3,
   },
   lastOpenedText: {
-    fontSize: typography.tiny,
+    fontSize: typography.tiny - 2,
     fontWeight: typography.bold,
-    color: colors.accentWarm,
+    color: colors.highlightText,
     textTransform: 'uppercase',
-    letterSpacing: 0.5,
+    letterSpacing: 0.6,
   },
   alertBar: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: spacing.lg,
     paddingVertical: spacing.sm,
-    gap: spacing.sm,
+    gap: spacing.sm - 1,
     borderLeftWidth: 4,
   },
   alertLabel: {
-    fontSize: typography.caption,
+    fontSize: typography.caption - 1,
     fontWeight: typography.bold,
-    letterSpacing: 0.3,
+    letterSpacing: 0.5,
     textTransform: 'uppercase',
   },
   manualBadge: {
     marginLeft: spacing.sm,
-    paddingHorizontal: spacing.sm,
-    paddingVertical: 2,
+    paddingHorizontal: spacing.sm - 1,
+    paddingVertical: 1,
     backgroundColor: colors.textLight,
     borderRadius: borderRadius.xs,
   },
   manualBadgeText: {
-    fontSize: 9,
+    fontSize: 8,
     fontWeight: typography.bold,
     color: '#FFFFFF',
-    letterSpacing: 0.5,
+    letterSpacing: 0.6,
   },
   cardContent: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: spacing.lg,
-    paddingTop: spacing.lg,
-    paddingBottom: spacing.lg,
+    paddingHorizontal: spacing.lg + spacing.xs,
+    paddingTop: spacing.lg + spacing.xs,
+    paddingBottom: spacing.lg + spacing.sm,
   },
   patientInfo: {
     flex: 1,
-    gap: spacing.sm,
+    gap: spacing.sm + 3,
   },
   patientName: {
-    fontSize: typography.h2,
+    fontSize: typography.h1 - 2,
     fontWeight: typography.bold,
     color: colors.text,
-    letterSpacing: -0.4,
-    lineHeight: 28,
+    letterSpacing: -0.6,
+    lineHeight: 32,
   },
   metaRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: spacing.sm,
+    gap: spacing.sm + 3,
   },
   podBadge: {
     backgroundColor: colors.primary,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.xs,
+    paddingHorizontal: spacing.md - 2,
+    paddingVertical: spacing.xs - 2,
     borderRadius: borderRadius.sm,
   },
   podText: {
-    fontSize: typography.tiny,
+    fontSize: typography.tiny - 1,
     fontWeight: typography.bold,
     color: '#FFFFFF',
-    letterSpacing: 0.5,
+    letterSpacing: 0.6,
   },
   locationBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: spacing.xs,
+    gap: spacing.xs - 3,
   },
   locationText: {
-    fontSize: typography.tiny,
+    fontSize: typography.tiny - 1,
     fontWeight: typography.medium,
-    color: colors.textLight,
+    color: colors.textMuted,
   },
   procedureType: {
-    fontSize: typography.caption,
+    fontSize: typography.caption - 1,
     fontWeight: typography.regular,
     color: colors.textLight,
-    lineHeight: 18,
+    lineHeight: 17,
   },
   chevron: {
-    opacity: 0.3,
+    opacity: 0.2,
     marginLeft: spacing.md,
   },
   fabButton: {
     position: 'absolute',
     right: spacing.xl,
-    bottom: spacing.xl,
-    width: 60,
-    height: 60,
-    borderRadius: 30,
+    bottom: spacing.xl + spacing.md,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
     backgroundColor: colors.primary,
     justifyContent: 'center',
     alignItems: 'center',
