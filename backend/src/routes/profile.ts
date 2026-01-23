@@ -118,30 +118,41 @@ export function registerProfileRoutes(app: App) {
       const profilePicture = body.profilePicture as string | undefined;
 
       app.logger.info(
-        { userId: session.user.id, body },
+        { userId: session.user.id, fullName },
         'Creating profile'
       );
 
-      const [profile] = await app.db
-        .insert(schema.userProfiles)
-        .values({
-          userId: session.user.id,
-          fullName,
-          pronouns,
-          role,
-          roleYear,
-          residencyProgram,
-          affiliation,
-          profilePicture,
-        })
-        .returning();
+      try {
+        const [profile] = await app.db
+          .insert(schema.userProfiles)
+          .values({
+            userId: session.user.id,
+            fullName,
+            pronouns,
+            role,
+            roleYear,
+            residencyProgram,
+            affiliation,
+            profilePicture,
+          })
+          .returning();
 
-      app.logger.info(
-        { userId: session.user.id, profileId: profile.id },
-        'Profile created successfully'
-      );
+        app.logger.info(
+          { userId: session.user.id, profileId: profile.id },
+          'Profile created successfully'
+        );
 
-      return profile;
+        return profile;
+      } catch (error) {
+        app.logger.error(
+          { err: error, userId: session.user.id },
+          'Failed to create profile'
+        );
+        return reply.status(400).send({
+          error: 'Failed to create profile - please try again',
+          details: error instanceof Error ? error.message : 'Unknown error',
+        });
+      }
     }
   );
 
@@ -209,41 +220,48 @@ export function registerProfileRoutes(app: App) {
       const profilePicture = body.profilePicture as string | undefined;
 
       app.logger.info(
-        { userId: session.user.id, body },
-        'Updating profile'
+        { userId: session.user.id, fieldsProvided: Object.keys(body).length },
+        'Updating profile (atomic save)'
       );
 
-      const updateData = {
-        ...(fullName && { fullName }),
-        ...(pronouns !== undefined && { pronouns }),
-        ...(role && { role }),
-        ...(roleYear !== undefined && { roleYear }),
-        ...(residencyProgram !== undefined && {
-          residencyProgram,
-        }),
-        ...(affiliation !== undefined && { affiliation }),
-        ...(profilePicture !== undefined && {
-          profilePicture,
-        }),
-      };
+      try {
+        const updateData = {
+          ...(fullName !== undefined && { fullName }),
+          ...(pronouns !== undefined && { pronouns }),
+          ...(role !== undefined && { role }),
+          ...(roleYear !== undefined && { roleYear }),
+          ...(residencyProgram !== undefined && { residencyProgram }),
+          ...(affiliation !== undefined && { affiliation }),
+          ...(profilePicture !== undefined && { profilePicture }),
+        };
 
-      const [profile] = await app.db
-        .update(schema.userProfiles)
-        .set(updateData)
-        .where(eq(schema.userProfiles.userId, session.user.id))
-        .returning();
+        const [profile] = await app.db
+          .update(schema.userProfiles)
+          .set(updateData)
+          .where(eq(schema.userProfiles.userId, session.user.id))
+          .returning();
 
-      if (!profile) {
-        app.logger.info({ userId: session.user.id }, 'Profile not found for update');
-        return null;
+        if (!profile) {
+          app.logger.warn({ userId: session.user.id }, 'Profile not found for update');
+          return reply.status(404).send({ error: 'Profile not found' });
+        }
+
+        app.logger.info(
+          { userId: session.user.id, profileId: profile.id, savedFields: Object.keys(updateData).length },
+          'Profile updated successfully (atomic)'
+        );
+
+        return profile;
+      } catch (error) {
+        app.logger.error(
+          { err: error, userId: session.user.id },
+          'Failed to update profile - atomic save failed'
+        );
+        return reply.status(400).send({
+          error: 'Failed to save profile - please try again',
+          details: error instanceof Error ? error.message : 'Unknown error',
+        });
       }
-
-      app.logger.info(
-        { userId: session.user.id, profileId: profile.id },
-        'Profile updated successfully'
-      );
-
-      return profile;
     }
   );
 }

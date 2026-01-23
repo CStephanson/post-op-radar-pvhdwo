@@ -47,8 +47,17 @@ export const patients = pgTable(
     procedureType: text('procedure_type').notNull(),
     postOpDay: integer('post_op_day').notNull(),
     alertStatus: text('alert_status', {
-      enum: ['green', 'yellow', 'red'],
+      enum: ['green', 'orange', 'red'],
     }).notNull().default('green'),
+    statusMode: text('status_mode', {
+      enum: ['auto', 'manual'],
+    }).notNull().default('auto'),
+    manualStatus: text('manual_status', {
+      enum: ['green', 'orange', 'red'],
+    }),
+    computedStatus: text('computed_status', {
+      enum: ['green', 'orange', 'red'],
+    }),
     preOpDiagnosis: text('pre_op_diagnosis'),
     postOpDiagnosis: text('post_op_diagnosis'),
     specimensTaken: text('specimens_taken'),
