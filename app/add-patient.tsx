@@ -16,18 +16,42 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, Stack } from 'expo-router';
 import { colors, typography, spacing, borderRadius, shadows } from '@/styles/commonStyles';
 import { IconSymbol } from '@/components/IconSymbol';
+import DateTimePicker from '@react-native-community/datetimepicker';
 
 export default function AddPatientScreen() {
-  console.log('AddPatientScreen rendered');
+  console.log('AddPatientScreen rendered - Add Patient clicked');
   const router = useRouter();
   
   const [saving, setSaving] = useState(false);
+  
+  // Patient identification
   const [name, setName] = useState('');
+  const [idStatement, setIdStatement] = useState('');
+  
+  // Operation details
   const [procedureType, setProcedureType] = useState('');
-  const [postOpDay, setPostOpDay] = useState('1');
+  const [preOpDiagnosis, setPreOpDiagnosis] = useState('');
+  const [postOpDiagnosis, setPostOpDiagnosis] = useState('');
+  const [specimensTaken, setSpecimensTaken] = useState('');
+  const [estimatedBloodLoss, setEstimatedBloodLoss] = useState('');
+  const [intraOpComplications, setIntraOpComplications] = useState('');
+  const [postOpComplications, setPostOpComplications] = useState('');
+  const [operationDateTime, setOperationDateTime] = useState(new Date());
+  const [showDatePicker, setShowDatePicker] = useState(false);
+  const [surgeon, setSurgeon] = useState('');
+  const [anesthesiologist, setAnesthesiologist] = useState('');
+  const [anesthesiaType, setAnesthesiaType] = useState('');
+  
+  // Current status
+  const [clinicalStatus, setClinicalStatus] = useState('');
   const [hospitalLocation, setHospitalLocation] = useState('');
+  const [postOpDay, setPostOpDay] = useState('1');
+  
+  // Initial alert status
   const [alertStatus, setAlertStatus] = useState<'green' | 'yellow' | 'red'>('green');
+  
   const [nameError, setNameError] = useState('');
+  const [debugMessage, setDebugMessage] = useState('');
 
   const handleCancel = () => {
     console.log('User tapped Cancel button');
@@ -35,42 +59,68 @@ export default function AddPatientScreen() {
   };
 
   const handleAddPatient = async () => {
-    console.log('User tapped Add Patient button');
+    console.log('User tapped Add Patient button - handleAddPatient fired');
+    setDebugMessage('Add Patient clicked - validating...');
     
     // Validate name is not empty
     const trimmedName = name.trim();
     if (!trimmedName) {
       console.log('Validation failed: Name is empty');
       setNameError('Patient name is required');
+      setDebugMessage('Validation failed: Patient name is required');
       Alert.alert('Validation Error', 'Please enter a patient name');
       return;
     }
     
     setNameError('');
     setSaving(true);
+    setDebugMessage('Saving patient...');
     
     try {
       const { authenticatedPost } = await import('@/utils/api');
       
+      // Combine intra-op and post-op complications into single field
+      const combinedComplications = [
+        intraOpComplications.trim() && `Intra-op: ${intraOpComplications.trim()}`,
+        postOpComplications.trim() && `Post-op: ${postOpComplications.trim()}`
+      ].filter(Boolean).join('\n') || '';
+      
       const newPatientData = {
         name: trimmedName,
+        idStatement: idStatement.trim() || '',
         procedureType: procedureType.trim() || 'Procedure Type',
+        preOpDiagnosis: preOpDiagnosis.trim() || '',
+        postOpDiagnosis: postOpDiagnosis.trim() || '',
+        specimensTaken: specimensTaken.trim() || '',
+        estimatedBloodLoss: estimatedBloodLoss.trim() || '',
+        complications: combinedComplications,
+        operationDateTime: operationDateTime.toISOString(),
+        surgeon: surgeon.trim() || '',
+        anesthesiologist: anesthesiologist.trim() || '',
+        anesthesiaType: anesthesiaType.trim() || '',
+        clinicalStatus: clinicalStatus.trim() || '',
+        hospitalLocation: hospitalLocation.trim() || '',
         postOpDay: parseInt(postOpDay) || 1,
         alertStatus: alertStatus,
-        hospitalLocation: hospitalLocation.trim() || '',
+        statusMode: 'auto',
+        manualStatus: alertStatus,
       };
       
-      console.log('Creating new patient with data:', newPatientData);
+      console.log('Creating new patient with complete data:', newPatientData);
       const newPatient = await authenticatedPost<any>('/api/patients', newPatientData);
       
       console.log('Patient created successfully:', newPatient);
+      setDebugMessage('Save success - patient created!');
       Alert.alert('Success', `Patient "${trimmedName}" added successfully!`);
       
-      // Navigate back to dashboard
+      // Navigate back to dashboard and refresh
+      console.log('Navigating back to dashboard');
       router.replace('/(tabs)/(home)/');
     } catch (error: any) {
       console.error('Error creating patient:', error);
-      Alert.alert('Error', error.message || 'Failed to add patient. Please try again.');
+      const errorMsg = error.message || 'Failed to add patient. Please try again.';
+      setDebugMessage(`Save failed: ${errorMsg}`);
+      Alert.alert('Error', errorMsg);
     } finally {
       setSaving(false);
     }
@@ -106,6 +156,16 @@ export default function AddPatientScreen() {
     return 'error';
   };
 
+  const formatDate = (date: Date) => {
+    return date.toLocaleDateString('en-US', {
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+    });
+  };
+
   const greenColor = getAlertColor('green');
   const greenBgColor = getAlertBgColor('green');
   const greenBorderColor = getAlertBorderColor('green');
@@ -123,6 +183,8 @@ export default function AddPatientScreen() {
   const redBorderColor = getAlertBorderColor('red');
   const redLabel = getAlertLabel('red');
   const redIcon = getAlertIcon('red');
+
+  const dateText = formatDate(operationDateTime);
 
   return (
     <SafeAreaView style={styles.safeArea} edges={['top']}>
@@ -147,15 +209,24 @@ export default function AddPatientScreen() {
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
         >
+          {/* Debug message (temporary for preview mode) */}
+          {debugMessage ? (
+            <View style={styles.debugContainer}>
+              <Text style={styles.debugText}>{debugMessage}</Text>
+            </View>
+          ) : null}
+
           <View style={styles.header}>
             <Text style={styles.headerTitle}>New Patient Information</Text>
             <Text style={styles.headerSubtitle}>
-              Enter patient details to begin monitoring post-operative recovery
+              Enter complete patient details for post-operative monitoring
             </Text>
           </View>
 
-          {/* Patient Name (Required) */}
+          {/* Patient Identification */}
           <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Patient Identification</Text>
+            
             <View style={styles.inputGroup}>
               <View style={styles.labelRow}>
                 <Text style={styles.label}>Patient Name</Text>
@@ -187,19 +258,205 @@ export default function AddPatientScreen() {
               ) : null}
             </View>
 
-            {/* Procedure Type (Optional) */}
             <View style={styles.inputGroup}>
-              <Text style={styles.label}>Procedure Type</Text>
+              <Text style={styles.label}>ID Statement / Medical History</Text>
+              <TextInput
+                style={[styles.input, styles.textArea]}
+                value={idStatement}
+                onChangeText={setIdStatement}
+                placeholder="Brief 1-2 line ID statement (e.g., 65 y/o M with h/o HTN, DM2)"
+                placeholderTextColor={colors.textLight}
+                multiline
+                numberOfLines={2}
+              />
+            </View>
+          </View>
+
+          {/* Operation Details */}
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Operation Details</Text>
+            
+            <View style={styles.inputGroup}>
+              <Text style={styles.label}>Procedure / Surgery Performed</Text>
               <TextInput
                 style={styles.input}
                 value={procedureType}
                 onChangeText={setProcedureType}
-                placeholder="e.g., Laparoscopic Cholecystectomy (optional)"
+                placeholder="e.g., Laparoscopic Cholecystectomy"
                 placeholderTextColor={colors.textLight}
               />
             </View>
 
-            {/* Post-Op Day (Optional) */}
+            <View style={styles.inputGroup}>
+              <Text style={styles.label}>Pre-Operative Diagnosis</Text>
+              <TextInput
+                style={[styles.input, styles.textArea]}
+                value={preOpDiagnosis}
+                onChangeText={setPreOpDiagnosis}
+                placeholder="Enter pre-operative diagnosis"
+                placeholderTextColor={colors.textLight}
+                multiline
+                numberOfLines={2}
+              />
+            </View>
+
+            <View style={styles.inputGroup}>
+              <Text style={styles.label}>Post-Operative Diagnosis</Text>
+              <TextInput
+                style={[styles.input, styles.textArea]}
+                value={postOpDiagnosis}
+                onChangeText={setPostOpDiagnosis}
+                placeholder="Enter post-operative diagnosis"
+                placeholderTextColor={colors.textLight}
+                multiline
+                numberOfLines={2}
+              />
+            </View>
+
+            <View style={styles.inputGroup}>
+              <Text style={styles.label}>Specimens</Text>
+              <TextInput
+                style={styles.input}
+                value={specimensTaken}
+                onChangeText={setSpecimensTaken}
+                placeholder="e.g., Gallbladder, Appendix"
+                placeholderTextColor={colors.textLight}
+              />
+            </View>
+
+            <View style={styles.inputGroup}>
+              <Text style={styles.label}>Estimated Blood Loss (EBL)</Text>
+              <TextInput
+                style={styles.input}
+                value={estimatedBloodLoss}
+                onChangeText={setEstimatedBloodLoss}
+                placeholder="e.g., 50 mL"
+                placeholderTextColor={colors.textLight}
+              />
+            </View>
+
+            <View style={styles.inputGroup}>
+              <Text style={styles.label}>Intra-Operative Complications</Text>
+              <TextInput
+                style={[styles.input, styles.textArea]}
+                value={intraOpComplications}
+                onChangeText={setIntraOpComplications}
+                placeholder="Any complications during surgery"
+                placeholderTextColor={colors.textLight}
+                multiline
+                numberOfLines={2}
+              />
+            </View>
+
+            <View style={styles.inputGroup}>
+              <Text style={styles.label}>Post-Operative Complications</Text>
+              <TextInput
+                style={[styles.input, styles.textArea]}
+                value={postOpComplications}
+                onChangeText={setPostOpComplications}
+                placeholder="Any complications after surgery"
+                placeholderTextColor={colors.textLight}
+                multiline
+                numberOfLines={2}
+              />
+            </View>
+
+            <View style={styles.inputGroup}>
+              <Text style={styles.label}>Date and Time of Operation</Text>
+              <TouchableOpacity
+                style={styles.dateButton}
+                onPress={() => {
+                  console.log('User tapped date picker');
+                  setShowDatePicker(true);
+                }}
+              >
+                <Text style={styles.dateButtonText}>{dateText}</Text>
+                <IconSymbol
+                  ios_icon_name="calendar"
+                  android_material_icon_name="calendar-today"
+                  size={20}
+                  color={colors.iconSecondary}
+                />
+              </TouchableOpacity>
+            </View>
+
+            {showDatePicker && (
+              <DateTimePicker
+                value={operationDateTime}
+                mode="datetime"
+                display="default"
+                onChange={(event, selectedDate) => {
+                  setShowDatePicker(false);
+                  if (selectedDate) {
+                    console.log('User selected date:', selectedDate);
+                    setOperationDateTime(selectedDate);
+                  }
+                }}
+              />
+            )}
+
+            <View style={styles.inputGroup}>
+              <Text style={styles.label}>Surgeon</Text>
+              <TextInput
+                style={styles.input}
+                value={surgeon}
+                onChangeText={setSurgeon}
+                placeholder="e.g., Dr. Smith"
+                placeholderTextColor={colors.textLight}
+              />
+            </View>
+
+            <View style={styles.inputGroup}>
+              <Text style={styles.label}>Anesthesiologist</Text>
+              <TextInput
+                style={styles.input}
+                value={anesthesiologist}
+                onChangeText={setAnesthesiologist}
+                placeholder="e.g., Dr. Johnson"
+                placeholderTextColor={colors.textLight}
+              />
+            </View>
+
+            <View style={styles.inputGroup}>
+              <Text style={styles.label}>Type of Anesthesia</Text>
+              <TextInput
+                style={styles.input}
+                value={anesthesiaType}
+                onChangeText={setAnesthesiaType}
+                placeholder="e.g., General anesthesia, Spinal"
+                placeholderTextColor={colors.textLight}
+              />
+            </View>
+          </View>
+
+          {/* Current Status */}
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Current Status</Text>
+            
+            <View style={styles.inputGroup}>
+              <Text style={styles.label}>Current Status of Patient</Text>
+              <TextInput
+                style={[styles.input, styles.textArea]}
+                value={clinicalStatus}
+                onChangeText={setClinicalStatus}
+                placeholder="e.g., Stable, tolerating diet, ambulating"
+                placeholderTextColor={colors.textLight}
+                multiline
+                numberOfLines={2}
+              />
+            </View>
+
+            <View style={styles.inputGroup}>
+              <Text style={styles.label}>Current Hospital Location</Text>
+              <TextInput
+                style={styles.input}
+                value={hospitalLocation}
+                onChangeText={setHospitalLocation}
+                placeholder="e.g., Ward/ICU, Floor 4, Room 412"
+                placeholderTextColor={colors.textLight}
+              />
+            </View>
+
             <View style={styles.inputGroup}>
               <Text style={styles.label}>Post-Operative Day (POD)</Text>
               <TextInput
@@ -212,21 +469,8 @@ export default function AddPatientScreen() {
               />
             </View>
 
-            {/* Hospital Location (Optional) */}
             <View style={styles.inputGroup}>
-              <Text style={styles.label}>Hospital Location</Text>
-              <TextInput
-                style={styles.input}
-                value={hospitalLocation}
-                onChangeText={setHospitalLocation}
-                placeholder="e.g., Floor 4, Room 412 (optional)"
-                placeholderTextColor={colors.textLight}
-              />
-            </View>
-
-            {/* Initial Status (Optional) */}
-            <View style={styles.inputGroup}>
-              <Text style={styles.label}>Initial Status</Text>
+              <Text style={styles.label}>Initial Alert Status</Text>
               <View style={styles.statusGrid}>
                 <TouchableOpacity
                   style={[
@@ -307,15 +551,15 @@ export default function AddPatientScreen() {
               {saving ? (
                 <ActivityIndicator color="#FFFFFF" />
               ) : (
-                <>
+                <React.Fragment>
                   <IconSymbol
                     ios_icon_name="plus.circle.fill"
                     android_material_icon_name="add-circle"
                     size={20}
                     color="#FFFFFF"
                   />
-                  <Text style={styles.addButtonText}>Add Patient</Text>
-                </>
+                  <Text style={styles.addButtonText}>Create Patient</Text>
+                </React.Fragment>
               )}
             </TouchableOpacity>
 
@@ -350,6 +594,21 @@ const styles = StyleSheet.create({
   scrollContent: {
     paddingBottom: spacing.xxxxl,
   },
+  debugContainer: {
+    backgroundColor: colors.alertYellowBg,
+    borderWidth: 2,
+    borderColor: colors.alertYellowBorder,
+    borderRadius: borderRadius.md,
+    padding: spacing.md,
+    marginHorizontal: spacing.xl,
+    marginTop: spacing.lg,
+  },
+  debugText: {
+    fontSize: typography.bodySmall,
+    fontWeight: typography.semibold,
+    color: colors.alertYellow,
+    textAlign: 'center',
+  },
   header: {
     paddingHorizontal: spacing.xl,
     paddingTop: spacing.xxl,
@@ -372,6 +631,13 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.xl,
     paddingTop: spacing.lg,
   },
+  sectionTitle: {
+    fontSize: typography.h4,
+    fontWeight: typography.bold,
+    color: colors.text,
+    marginBottom: spacing.lg,
+    letterSpacing: -0.2,
+  },
   inputGroup: {
     marginBottom: spacing.lg + spacing.sm,
   },
@@ -385,6 +651,7 @@ const styles = StyleSheet.create({
     fontSize: typography.bodySmall,
     fontWeight: typography.semibold,
     color: colors.text,
+    marginBottom: spacing.sm,
   },
   requiredBadge: {
     backgroundColor: colors.error,
@@ -408,6 +675,11 @@ const styles = StyleSheet.create({
     fontSize: typography.body,
     color: colors.text,
   },
+  textArea: {
+    minHeight: 80,
+    paddingTop: spacing.md,
+    textAlignVertical: 'top',
+  },
   inputError: {
     borderColor: colors.error,
     borderWidth: 2,
@@ -422,6 +694,21 @@ const styles = StyleSheet.create({
     fontSize: typography.caption,
     fontWeight: typography.medium,
     color: colors.error,
+  },
+  dateButton: {
+    backgroundColor: colors.backgroundAlt,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: borderRadius.md,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  dateButtonText: {
+    fontSize: typography.body,
+    color: colors.text,
   },
   statusGrid: {
     flexDirection: 'row',
