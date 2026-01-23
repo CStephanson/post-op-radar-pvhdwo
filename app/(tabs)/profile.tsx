@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -29,13 +29,7 @@ export default function ProfileScreen() {
   const [deleteConfirmation, setDeleteConfirmation] = useState('');
   const [deleting, setDeleting] = useState(false);
 
-  useEffect(() => {
-    if (user) {
-      loadProfile();
-    }
-  }, [user]);
-
-  const loadProfile = async () => {
+  const loadProfile = useCallback(async () => {
     console.log('Loading user profile');
     setLoading(true);
     try {
@@ -94,7 +88,13 @@ export default function ProfileScreen() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [isGuest, bearerToken, signOut, router]);
+
+  useEffect(() => {
+    if (user) {
+      loadProfile();
+    }
+  }, [user, loadProfile]);
 
   const handleEditProfile = () => {
     console.log('User tapped edit profile button');

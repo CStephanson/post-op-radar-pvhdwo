@@ -1,5 +1,5 @@
 
-import React, { createContext, useContext, useState, useEffect } from "react";
+import React, { createContext, useContext, useState, useEffect, useCallback } from "react";
 import { Platform } from "react-native";
 import * as SecureStore from "expo-secure-store";
 import { useRouter, useSegments } from "expo-router";
@@ -42,35 +42,72 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const segments = useSegments();
 
-  useEffect(() => {
-    console.log('[Auth] Initializing auth check...');
-    checkAuth();
+  const getStorageItem = useCallback(async (key: string): Promise<string | null> => {
+    try {
+      if (Platform.OS === "web") {
+        return localStorage.getItem(key);
+      } else {
+        return await SecureStore.getItemAsync(key);
+      }
+    } catch (error) {
+      console.error(`[Auth] Error getting storage item ${key}:`, error);
+      return null;
+    }
   }, []);
 
-  useEffect(() => {
-    if (loading) return;
-
-    const inAuthGroup = segments[0] === "auth" || segments[0] === "auth-callback" || segments[0] === "auth-popup" || segments[0] === "profile-setup";
-
-    console.log('[Auth] Navigation check - user:', user?.email, 'isGuest:', isGuest, 'hasToken:', !!bearerToken, 'inAuthGroup:', inAuthGroup, 'segments:', segments);
-
-    // CRITICAL: User is considered authenticated ONLY if:
-    // 1. They have a user object AND
-    // 2. Either they have a valid bearerToken (logged in) OR they are in guest mode
-    const isAuthenticated = !!user && (!!bearerToken || isGuest);
-
-    console.log('[Auth] isAuthenticated:', isAuthenticated, 'user:', !!user, 'bearerToken:', !!bearerToken, 'isGuest:', isGuest);
-
-    if (!isAuthenticated && !inAuthGroup) {
-      console.log('[Auth] No valid session, redirecting to /auth');
-      router.replace("/auth");
-    } else if (isAuthenticated && inAuthGroup) {
-      console.log('[Auth] User authenticated, redirecting to dashboard');
-      router.replace("/(tabs)/(home)");
+  const setStorageItem = useCallback(async (key: string, value: string) => {
+    try {
+      if (Platform.OS === "web") {
+        localStorage.setItem(key, value);
+      } else {
+        await SecureStore.setItemAsync(key, value);
+      }
+    } catch (error) {
+      console.error(`[Auth] Error setting storage item ${key}:`, error);
     }
-  }, [user, loading, segments, bearerToken, isGuest, router]);
+  }, []);
 
-  const checkAuth = async () => {
+  const deleteStorageItem = useCallback(async (key: string) => {
+    try {
+      if (Platform.OS === "web") {
+        localStorage.removeItem(key);
+      } else {
+        await SecureStore.deleteItemAsync(key);
+      }
+    } catch (error) {
+      console.error(`[Auth] Error deleting storage item ${key}:`, error);
+    }
+  }, []);
+
+  const storeBearerToken = useCallback(async (token: string) => {
+    try {
+      if (Platform.OS === "web") {
+        localStorage.setItem(BEARER_TOKEN_KEY, token);
+      } else {
+        await SecureStore.setItemAsync(BEARER_TOKEN_KEY, token);
+      }
+      setBearerToken(token);
+      console.log('[Auth] Bearer token stored successfully');
+    } catch (error) {
+      console.error("[Auth] Error storing bearer token:", error);
+    }
+  }, []);
+
+  const clearBearerToken = useCallback(async () => {
+    try {
+      if (Platform.OS === "web") {
+        localStorage.removeItem(BEARER_TOKEN_KEY);
+      } else {
+        await SecureStore.deleteItemAsync(BEARER_TOKEN_KEY);
+      }
+      setBearerToken(null);
+      console.log('[Auth] Bearer token cleared');
+    } catch (error) {
+      console.error("[Auth] Error clearing bearer token:", error);
+    }
+  }, []);
+
+  const checkAuth = useCallback(async () => {
     try {
       console.log('[Auth] Checking for existing session...');
       
@@ -134,72 +171,35 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     } finally {
       setLoading(false);
     }
-  };
+  }, [getStorageItem, setStorageItem, deleteStorageItem, storeBearerToken]);
 
-  const getStorageItem = async (key: string): Promise<string | null> => {
-    try {
-      if (Platform.OS === "web") {
-        return localStorage.getItem(key);
-      } else {
-        return await SecureStore.getItemAsync(key);
-      }
-    } catch (error) {
-      console.error(`[Auth] Error getting storage item ${key}:`, error);
-      return null;
-    }
-  };
+  useEffect(() => {
+    console.log('[Auth] Initializing auth check...');
+    checkAuth();
+  }, [checkAuth]);
 
-  const setStorageItem = async (key: string, value: string) => {
-    try {
-      if (Platform.OS === "web") {
-        localStorage.setItem(key, value);
-      } else {
-        await SecureStore.setItemAsync(key, value);
-      }
-    } catch (error) {
-      console.error(`[Auth] Error setting storage item ${key}:`, error);
-    }
-  };
+  useEffect(() => {
+    if (loading) return;
 
-  const deleteStorageItem = async (key: string) => {
-    try {
-      if (Platform.OS === "web") {
-        localStorage.removeItem(key);
-      } else {
-        await SecureStore.deleteItemAsync(key);
-      }
-    } catch (error) {
-      console.error(`[Auth] Error deleting storage item ${key}:`, error);
-    }
-  };
+    const inAuthGroup = segments[0] === "auth" || segments[0] === "auth-callback" || segments[0] === "auth-popup" || segments[0] === "profile-setup";
 
-  const storeBearerToken = async (token: string) => {
-    try {
-      if (Platform.OS === "web") {
-        localStorage.setItem(BEARER_TOKEN_KEY, token);
-      } else {
-        await SecureStore.setItemAsync(BEARER_TOKEN_KEY, token);
-      }
-      setBearerToken(token);
-      console.log('[Auth] Bearer token stored successfully');
-    } catch (error) {
-      console.error("[Auth] Error storing bearer token:", error);
-    }
-  };
+    console.log('[Auth] Navigation check - user:', user?.email, 'isGuest:', isGuest, 'hasToken:', !!bearerToken, 'inAuthGroup:', inAuthGroup, 'segments:', segments);
 
-  const clearBearerToken = async () => {
-    try {
-      if (Platform.OS === "web") {
-        localStorage.removeItem(BEARER_TOKEN_KEY);
-      } else {
-        await SecureStore.deleteItemAsync(BEARER_TOKEN_KEY);
-      }
-      setBearerToken(null);
-      console.log('[Auth] Bearer token cleared');
-    } catch (error) {
-      console.error("[Auth] Error clearing bearer token:", error);
+    // CRITICAL: User is considered authenticated ONLY if:
+    // 1. They have a user object AND
+    // 2. Either they have a valid bearerToken (logged in) OR they are in guest mode
+    const isAuthenticated = !!user && (!!bearerToken || isGuest);
+
+    console.log('[Auth] isAuthenticated:', isAuthenticated, 'user:', !!user, 'bearerToken:', !!bearerToken, 'isGuest:', isGuest);
+
+    if (!isAuthenticated && !inAuthGroup) {
+      console.log('[Auth] No valid session, redirecting to /auth');
+      router.replace("/auth");
+    } else if (isAuthenticated && inAuthGroup) {
+      console.log('[Auth] User authenticated, redirecting to dashboard');
+      router.replace("/(tabs)/(home)");
     }
-  };
+  }, [user, loading, segments, bearerToken, isGuest, router]);
 
   const signInWithEmail = async (email: string, password: string) => {
     console.log('[Auth] Sign in button clicked for email:', email);

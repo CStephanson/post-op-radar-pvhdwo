@@ -1,11 +1,12 @@
+
 // Global error logging for runtime errors
 // Captures console.log/warn/error and sends to Natively server for AI debugging
 
-// Declare __DEV__ global (React Native global for development mode detection)
-declare const __DEV__: boolean;
-
 import { Platform } from "react-native";
 import Constants from "expo-constants";
+
+// Declare __DEV__ global (React Native global for development mode detection)
+declare const __DEV__: boolean;
 
 // Simple debouncing to prevent duplicate logs
 const recentLogs: { [key: string]: boolean } = {};
@@ -25,7 +26,7 @@ const shouldMuteMessage = (message: string): boolean => {
 };
 
 // Queue for batching logs
-let logQueue: Array<{ level: string; message: string; source: string; timestamp: string; platform: string }> = [];
+let logQueue: { level: string; message: string; source: string; timestamp: string; platform: string }[] = [];
 let flushTimeout: ReturnType<typeof setTimeout> | null = null;
 const FLUSH_INTERVAL = 500; // Flush every 500ms
 
@@ -82,6 +83,7 @@ const getLogServerUrl = (): string | null => {
     }
   } catch (e) {
     // Silently fail
+    console.log('Error getting log server URL:', e);
   }
 
   urlChecked = true;
@@ -123,6 +125,7 @@ const flushLogs = async () => {
       });
     } catch (e) {
       // Silently ignore sync errors
+      console.log('Error in flushLogs:', e);
     }
   }
 };
@@ -178,6 +181,7 @@ const sendErrorToParent = (level: string, message: string, data: any) => {
     }
   } catch (error) {
     // Silently fail
+    console.log('Error sending to parent:', error);
   }
 };
 

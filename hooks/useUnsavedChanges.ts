@@ -84,7 +84,7 @@ export function useUnsavedChanges({
         { cancelable: true }
       );
     },
-    [hasUnsavedChanges, onSave, onDiscard]
+    [onSave, onDiscard]
   );
 
   // Handle hardware back button (Android)

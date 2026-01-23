@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -32,14 +32,7 @@ export default function HomeScreen() {
   const [showSortMenu, setShowSortMenu] = useState(false);
   const [lastOpenedPatientId, setLastOpenedPatientId] = useState<string | null>(null);
 
-  useEffect(() => {
-    if (user) {
-      loadPatients();
-      loadLastOpenedPatient();
-    }
-  }, [user]);
-
-  const loadLastOpenedPatient = async () => {
+  const loadLastOpenedPatient = useCallback(async () => {
     try {
       const { authenticatedGet } = await import('@/utils/api');
       const profile = await authenticatedGet<any>('/api/profile');
@@ -50,9 +43,9 @@ export default function HomeScreen() {
     } catch (error: any) {
       console.error('Error loading last opened patient:', error);
     }
-  };
+  }, []);
 
-  const loadPatients = async () => {
+  const loadPatients = useCallback(async () => {
     console.log('Loading patients for user (iOS)');
     setLoading(true);
     try {
@@ -101,7 +94,14 @@ export default function HomeScreen() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [router]);
+
+  useEffect(() => {
+    if (user) {
+      loadPatients();
+      loadLastOpenedPatient();
+    }
+  }, [user, loadPatients, loadLastOpenedPatient]);
 
   const sortPatients = (patientsToSort: Patient[], sortOption: SortOption): Patient[] => {
     const sorted = [...patientsToSort];

@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -86,89 +86,7 @@ export default function PatientInfoScreen() {
     statusMode !== originalValues.statusMode ||
     manualStatus !== originalValues.manualStatus;
 
-  // Unsaved changes protection
-  const { handleBackPress, isNavigating } = useUnsavedChanges({
-    hasUnsavedChanges,
-    onSave: async () => {
-      await handleSave(false); // Save without navigating
-    },
-    onDiscard: () => {
-      // Revert to original values
-      setName(originalValues.name);
-      setIdStatement(originalValues.idStatement);
-      setProcedureType(originalValues.procedureType);
-      setPreOpDiagnosis(originalValues.preOpDiagnosis);
-      setPostOpDiagnosis(originalValues.postOpDiagnosis);
-      setSpecimensTaken(originalValues.specimensTaken);
-      setEstimatedBloodLoss(originalValues.estimatedBloodLoss);
-      setComplications(originalValues.complications);
-      setOperationDateTime(originalValues.operationDateTime);
-      setSurgeon(originalValues.surgeon);
-      setAnesthesiologist(originalValues.anesthesiologist);
-      setAnesthesiaType(originalValues.anesthesiaType);
-      setClinicalStatus(originalValues.clinicalStatus);
-      setHospitalLocation(originalValues.hospitalLocation);
-      setStatusMode(originalValues.statusMode);
-      setManualStatus(originalValues.manualStatus);
-    },
-  });
-
-  useEffect(() => {
-    loadPatientInfo();
-  }, [id]);
-
-  const loadPatientInfo = async () => {
-    console.log('Loading patient info for ID:', id);
-    setLoading(true);
-    try {
-      const { authenticatedGet } = await import('@/utils/api');
-      const patient = await authenticatedGet<any>(`/api/patients/${id}`);
-      
-      const values = {
-        name: patient.name || '',
-        idStatement: patient.idStatement || '',
-        procedureType: patient.procedureType || '',
-        preOpDiagnosis: patient.preOpDiagnosis || '',
-        postOpDiagnosis: patient.postOpDiagnosis || '',
-        specimensTaken: patient.specimensTaken || '',
-        estimatedBloodLoss: patient.estimatedBloodLoss || '',
-        complications: patient.complications || '',
-        operationDateTime: patient.operationDateTime ? new Date(patient.operationDateTime) : new Date(),
-        surgeon: patient.surgeon || '',
-        anesthesiologist: patient.anesthesiologist || '',
-        anesthesiaType: patient.anesthesiaType || '',
-        clinicalStatus: patient.clinicalStatus || '',
-        hospitalLocation: patient.hospitalLocation || '',
-        statusMode: patient.statusMode || 'auto',
-        manualStatus: patient.manualStatus || 'green',
-      };
-      
-      setName(values.name);
-      setIdStatement(values.idStatement);
-      setProcedureType(values.procedureType);
-      setPreOpDiagnosis(values.preOpDiagnosis);
-      setPostOpDiagnosis(values.postOpDiagnosis);
-      setSpecimensTaken(values.specimensTaken);
-      setEstimatedBloodLoss(values.estimatedBloodLoss);
-      setComplications(values.complications);
-      setOperationDateTime(values.operationDateTime);
-      setSurgeon(values.surgeon);
-      setAnesthesiologist(values.anesthesiologist);
-      setAnesthesiaType(values.anesthesiaType);
-      setClinicalStatus(values.clinicalStatus);
-      setHospitalLocation(values.hospitalLocation);
-      setStatusMode(values.statusMode);
-      setManualStatus(values.manualStatus);
-      setOriginalValues(values);
-    } catch (error: any) {
-      console.error('Error loading patient info:', error);
-      Alert.alert('Error', error.message || 'Failed to load patient information');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleSave = async (shouldNavigate: boolean = true) => {
+  const handleSave = useCallback(async (shouldNavigate: boolean = true) => {
     console.log('Saving patient info, shouldNavigate:', shouldNavigate);
     
     setSaving(true);
@@ -257,7 +175,89 @@ export default function PatientInfoScreen() {
     } finally {
       setSaving(false);
     }
-  };
+  }, [id, name, idStatement, procedureType, preOpDiagnosis, postOpDiagnosis, specimensTaken, estimatedBloodLoss, complications, operationDateTime, surgeon, anesthesiologist, anesthesiaType, clinicalStatus, hospitalLocation, statusMode, manualStatus, router]);
+
+  const loadPatientInfo = useCallback(async () => {
+    console.log('Loading patient info for ID:', id);
+    setLoading(true);
+    try {
+      const { authenticatedGet } = await import('@/utils/api');
+      const patient = await authenticatedGet<any>(`/api/patients/${id}`);
+      
+      const values = {
+        name: patient.name || '',
+        idStatement: patient.idStatement || '',
+        procedureType: patient.procedureType || '',
+        preOpDiagnosis: patient.preOpDiagnosis || '',
+        postOpDiagnosis: patient.postOpDiagnosis || '',
+        specimensTaken: patient.specimensTaken || '',
+        estimatedBloodLoss: patient.estimatedBloodLoss || '',
+        complications: patient.complications || '',
+        operationDateTime: patient.operationDateTime ? new Date(patient.operationDateTime) : new Date(),
+        surgeon: patient.surgeon || '',
+        anesthesiologist: patient.anesthesiologist || '',
+        anesthesiaType: patient.anesthesiaType || '',
+        clinicalStatus: patient.clinicalStatus || '',
+        hospitalLocation: patient.hospitalLocation || '',
+        statusMode: patient.statusMode || 'auto',
+        manualStatus: patient.manualStatus || 'green',
+      };
+      
+      setName(values.name);
+      setIdStatement(values.idStatement);
+      setProcedureType(values.procedureType);
+      setPreOpDiagnosis(values.preOpDiagnosis);
+      setPostOpDiagnosis(values.postOpDiagnosis);
+      setSpecimensTaken(values.specimensTaken);
+      setEstimatedBloodLoss(values.estimatedBloodLoss);
+      setComplications(values.complications);
+      setOperationDateTime(values.operationDateTime);
+      setSurgeon(values.surgeon);
+      setAnesthesiologist(values.anesthesiologist);
+      setAnesthesiaType(values.anesthesiaType);
+      setClinicalStatus(values.clinicalStatus);
+      setHospitalLocation(values.hospitalLocation);
+      setStatusMode(values.statusMode);
+      setManualStatus(values.manualStatus);
+      setOriginalValues(values);
+    } catch (error: any) {
+      console.error('Error loading patient info:', error);
+      Alert.alert('Error', error.message || 'Failed to load patient information');
+    } finally {
+      setLoading(false);
+    }
+  }, [id]);
+
+  // Unsaved changes protection
+  const { handleBackPress, isNavigating } = useUnsavedChanges({
+    hasUnsavedChanges,
+    onSave: async () => {
+      await handleSave(false); // Save without navigating
+    },
+    onDiscard: () => {
+      // Revert to original values
+      setName(originalValues.name);
+      setIdStatement(originalValues.idStatement);
+      setProcedureType(originalValues.procedureType);
+      setPreOpDiagnosis(originalValues.preOpDiagnosis);
+      setPostOpDiagnosis(originalValues.postOpDiagnosis);
+      setSpecimensTaken(originalValues.specimensTaken);
+      setEstimatedBloodLoss(originalValues.estimatedBloodLoss);
+      setComplications(originalValues.complications);
+      setOperationDateTime(originalValues.operationDateTime);
+      setSurgeon(originalValues.surgeon);
+      setAnesthesiologist(originalValues.anesthesiologist);
+      setAnesthesiaType(originalValues.anesthesiaType);
+      setClinicalStatus(originalValues.clinicalStatus);
+      setHospitalLocation(originalValues.hospitalLocation);
+      setStatusMode(originalValues.statusMode);
+      setManualStatus(originalValues.manualStatus);
+    },
+  });
+
+  useEffect(() => {
+    loadPatientInfo();
+  }, [loadPatientInfo]);
 
   const handleDelete = () => {
     console.log('User tapped delete button');
