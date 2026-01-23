@@ -41,10 +41,8 @@ export class ErrorBoundary extends Component<Props, State> {
   }
 
   componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
-    // Log error to console
     console.error("Error caught by boundary:", error, errorInfo);
 
-    // Check if it's an authentication error
     const errorMessage = error.message || '';
     if (errorMessage.includes('Authentication token not found') || 
         errorMessage.includes('Session expired') ||
@@ -52,13 +50,11 @@ export class ErrorBoundary extends Component<Props, State> {
       console.log('[ErrorBoundary] Authentication error detected - showing user-friendly message');
     }
 
-    // Update state with error info
     this.setState({
       error,
       errorInfo,
     });
 
-    // Call custom error handler if provided
     this.props.onError?.(error, errorInfo);
   }
 
@@ -72,12 +68,10 @@ export class ErrorBoundary extends Component<Props, State> {
 
   render() {
     if (this.state.hasError) {
-      // Custom fallback UI
       if (this.props.fallback) {
         return this.props.fallback;
       }
 
-      // Check if it's an authentication error
       const errorMessage = this.state.error?.message || '';
       const isAuthError = errorMessage.includes('Authentication token not found') || 
                           errorMessage.includes('Session expired') ||
@@ -93,22 +87,22 @@ export class ErrorBoundary extends Component<Props, State> {
       const showErrorDetails = __DEV__ && this.state.error && !isAuthError;
       const errorString = this.state.error ? this.state.error.toString() : '';
       const componentStack = this.state.errorInfo ? this.state.errorInfo.componentStack : '';
+      const hasComponentStack = this.state.errorInfo !== null;
 
-      // Default fallback UI
       return (
         <View style={styles.container}>
           <Text style={styles.title}>{titleText}</Text>
           <Text style={styles.message}>{messageText}</Text>
 
-          {showErrorDetails && (
+          {showErrorDetails ? (
             <ScrollView style={styles.errorDetails}>
               <Text style={styles.errorTitle}>Error Details (Dev Only):</Text>
               <Text style={styles.errorText}>{errorString}</Text>
-              {this.state.errorInfo && (
+              {hasComponentStack ? (
                 <Text style={styles.errorStack}>{componentStack}</Text>
-              )}
+              ) : null}
             </ScrollView>
-          )}
+          ) : null}
 
           <TouchableOpacity style={styles.button} onPress={this.handleReset}>
             <Text style={styles.buttonText}>{buttonText}</Text>
