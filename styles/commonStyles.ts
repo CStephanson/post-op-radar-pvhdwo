@@ -1,62 +1,74 @@
 
 import { StyleSheet, ViewStyle, TextStyle } from 'react-native';
 
-// Medical/Hospital-appropriate color scheme - calm, professional, credible
+// Refined color scheme - distinctive yet calm, professional, and clinically credible
 export const colors = {
-  // Primary colors - calm, professional medical blue
-  primary: '#0369A1',        // Deep medical blue
-  secondary: '#0C4A6E',      // Darker blue
-  accent: '#0EA5E9',         // Bright accent blue
+  // Primary colors - sophisticated teal with depth
+  primary: '#0D9488',        // Teal-600 - distinctive yet professional
+  primaryDark: '#0F766E',    // Teal-700 - deeper accent
+  primaryLight: '#14B8A6',   // Teal-500 - lighter accent
   
-  // Backgrounds - soft, clean, breathable
-  background: '#F8FAFC',     // Very light gray-blue (almost white)
+  // Secondary colors - warm slate for contrast
+  secondary: '#475569',      // Slate-600
+  secondaryDark: '#334155',  // Slate-700
+  
+  // Accent colors - controlled pops of color
+  accent: '#06B6D4',         // Cyan-500 - fresh, clinical
+  accentWarm: '#F59E0B',     // Amber-500 - warm highlight
+  
+  // Backgrounds - calm, breathable
+  background: '#F8FAFC',     // Slate-50 - very light, airy
   backgroundAlt: '#FFFFFF',  // Pure white
   card: '#FFFFFF',           // White cards
-  cardHover: '#F1F5F9',      // Subtle hover state
+  cardHover: '#F1F5F9',      // Slate-100 - subtle hover
   
-  // Text - clear hierarchy
-  text: '#0F172A',           // Almost black (high contrast)
-  textSecondary: '#475569',  // Medium gray
-  textLight: '#94A3B8',      // Light gray
-  textMuted: '#CBD5E1',      // Very light gray
+  // Text - clear hierarchy with warmth
+  text: '#0F172A',           // Slate-900 - deep, readable
+  textSecondary: '#475569',  // Slate-600 - medium gray
+  textLight: '#94A3B8',      // Slate-400 - light gray
+  textMuted: '#CBD5E1',      // Slate-300 - very light
   
-  // Alert status colors - clear but not alarming
-  alertGreen: '#059669',     // Calm green - safe
-  alertYellow: '#D97706',    // Warm amber - caution
-  alertRed: '#DC2626',       // Clear red - attention needed
+  // Alert status colors - integrated into the color system
+  alertGreen: '#059669',     // Emerald-600 - calm, reassuring
+  alertYellow: '#F59E0B',    // Amber-500 - warm, attentive
+  alertRed: '#DC2626',       // Red-600 - clear, not alarming
   
-  // Alert backgrounds - very subtle, calming
-  alertGreenBg: '#ECFDF5',   // Very light green
-  alertYellowBg: '#FFFBEB',  // Very light amber
-  alertRedBg: '#FEF2F2',     // Very light red
+  // Alert backgrounds - soft, integrated
+  alertGreenBg: '#ECFDF5',   // Emerald-50
+  alertYellowBg: '#FFFBEB',  // Amber-50
+  alertRedBg: '#FEF2F2',     // Red-50
   
-  // Alert borders - subtle accent
-  alertGreenBorder: '#A7F3D0',
-  alertYellowBorder: '#FDE68A',
-  alertRedBorder: '#FECACA',
+  // Alert borders - subtle definition
+  alertGreenBorder: '#A7F3D0',  // Emerald-200
+  alertYellowBorder: '#FDE68A', // Amber-200
+  alertRedBorder: '#FECACA',    // Red-200
   
-  // Borders and dividers - minimal, clean
-  border: '#E2E8F0',
-  borderLight: '#F1F5F9',
-  divider: '#CBD5E1',
+  // Borders and dividers - refined, minimal
+  border: '#E2E8F0',         // Slate-200
+  borderLight: '#F1F5F9',    // Slate-100
+  divider: '#CBD5E1',        // Slate-300
   
   // Functional colors
-  success: '#059669',
-  warning: '#D97706',
-  error: '#DC2626',
-  info: '#0284C7',
+  success: '#059669',        // Emerald-600
+  warning: '#F59E0B',        // Amber-500
+  error: '#DC2626',          // Red-600
+  info: '#0891B2',           // Cyan-600
   
-  // Icon colors
-  iconPrimary: '#0369A1',
-  iconSecondary: '#64748B',
-  iconLight: '#94A3B8',
+  // Icon colors - integrated palette
+  iconPrimary: '#0D9488',    // Teal-600
+  iconSecondary: '#64748B',  // Slate-500
+  iconLight: '#94A3B8',      // Slate-400
+  
+  // Special highlights
+  highlight: '#FEF3C7',      // Amber-100 - for "last viewed" badge
+  highlightBorder: '#FCD34D', // Amber-300
 };
 
 export const typography = {
-  // Font sizes - clear hierarchy, refined for clinical use
-  h1: 26,
-  h2: 20,
-  h3: 18,
+  // Font sizes - refined hierarchy
+  h1: 28,
+  h2: 22,
+  h3: 19,
   h4: 17,
   h5: 16,
   body: 15,
@@ -84,6 +96,7 @@ export const spacing = {
 };
 
 export const borderRadius = {
+  xs: 4,
   sm: 6,
   md: 10,
   lg: 14,

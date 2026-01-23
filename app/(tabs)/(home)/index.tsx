@@ -31,12 +31,27 @@ export default function HomeScreen() {
   const [loading, setLoading] = useState(true);
   const [sortBy, setSortBy] = useState<SortOption>('status');
   const [showSortMenu, setShowSortMenu] = useState(false);
+  const [lastOpenedPatientId, setLastOpenedPatientId] = useState<string | null>(null);
 
   useEffect(() => {
     if (user) {
       loadPatients();
+      loadLastOpenedPatient();
     }
   }, [user]);
+
+  const loadLastOpenedPatient = async () => {
+    try {
+      const { authenticatedGet } = await import('@/utils/api');
+      const profile = await authenticatedGet<any>('/api/profile');
+      if (profile.lastOpenedPatientId) {
+        setLastOpenedPatientId(profile.lastOpenedPatientId);
+        console.log('Last opened patient:', profile.lastOpenedPatientId);
+      }
+    } catch (error: any) {
+      console.error('Error loading last opened patient:', error);
+    }
+  };
 
   const loadPatients = async () => {
     console.log('Loading patients for user');
@@ -45,7 +60,6 @@ export default function HomeScreen() {
       const { authenticatedGet } = await import('@/utils/api');
       const patientsData = await authenticatedGet<Patient[]>('/api/patients');
       
-      // Convert date strings to Date objects
       const patientsWithDates = patientsData.map(patient => ({
         ...patient,
         operationDateTime: patient.operationDateTime ? new Date(patient.operationDateTime) : undefined,
@@ -95,15 +109,27 @@ export default function HomeScreen() {
     return sorted;
   };
 
-  const handlePatientPress = (patientId: string) => {
+  const handlePatientPress = async (patientId: string) => {
     console.log('User tapped patient card:', patientId);
+    
+    try {
+      const { authenticatedPut } = await import('@/utils/api');
+      await authenticatedPut('/api/profile', {
+        lastOpenedPatientId: patientId,
+        lastOpenedAt: new Date().toISOString(),
+      });
+      setLastOpenedPatientId(patientId);
+      console.log('Updated last opened patient to:', patientId);
+    } catch (error: any) {
+      console.error('Error updating last opened patient:', error);
+    }
+    
     router.push(`/patient/${patientId}`);
   };
 
   const handleAddPatient = async () => {
     console.log('User tapped add patient button');
     
-    // Create a new patient with minimal required fields
     try {
       const { authenticatedPost } = await import('@/utils/api');
       
@@ -117,7 +143,6 @@ export default function HomeScreen() {
       console.log('Creating new patient:', newPatientData);
       const newPatient = await authenticatedPost<any>('/api/patients', newPatientData);
       
-      // Navigate to patient info screen to complete the details
       router.push(`/patient-info/${newPatient.id}`);
     } catch (error: any) {
       console.error('Error creating patient:', error);
@@ -144,7 +169,7 @@ export default function HomeScreen() {
   };
 
   const getAlertLabel = (status: AlertStatus) => {
-    if (status === 'green') return 'No Concerns';
+    if (status === 'green') return 'Stable';
     if (status === 'yellow') return 'Monitor';
     return 'Reassess';
   };
@@ -156,10 +181,10 @@ export default function HomeScreen() {
   };
 
   const getSortLabel = (option: SortOption) => {
-    if (option === 'name') return 'Name (A-Z)';
-    if (option === 'date') return 'Operation Date';
+    if (option === 'name') return 'Name';
+    if (option === 'date') return 'Date';
     if (option === 'location') return 'Location';
-    return 'Alert Status';
+    return 'Status';
   };
 
   const getSortIcon = (option: SortOption) => {
@@ -189,36 +214,35 @@ export default function HomeScreen() {
   return (
     <SafeAreaView style={styles.safeArea} edges={['top']}>
       <View style={styles.container}>
-        {/* Compact Header */}
         <View style={styles.header}>
-          <View style={styles.headerLeft}>
-            <Text style={styles.headerTitle}>Post-Op Radar</Text>
-            <View style={styles.disclaimerCompact}>
-              <IconSymbol
-                ios_icon_name="info.circle"
-                android_material_icon_name="info"
-                size={14}
-                color={colors.textLight}
-                style={styles.disclaimerIcon}
-              />
-              <Text style={styles.disclaimerText}>Educational use only</Text>
+          <View style={styles.headerContent}>
+            <View style={styles.headerLeft}>
+              <Text style={styles.headerTitle}>Post-Op Radar</Text>
+              <View style={styles.disclaimerBadge}>
+                <IconSymbol
+                  ios_icon_name="info.circle.fill"
+                  android_material_icon_name="info"
+                  size={12}
+                  color={colors.textLight}
+                />
+                <Text style={styles.disclaimerText}>Educational use only</Text>
+              </View>
             </View>
+            
+            <TouchableOpacity
+              style={styles.profileButton}
+              onPress={() => router.push('/(tabs)/profile')}
+            >
+              <IconSymbol
+                ios_icon_name="person.circle.fill"
+                android_material_icon_name="account-circle"
+                size={36}
+                color={colors.primary}
+              />
+            </TouchableOpacity>
           </View>
-          
-          <TouchableOpacity
-            style={styles.profileButton}
-            onPress={() => router.push('/(tabs)/profile')}
-          >
-            <IconSymbol
-              ios_icon_name="person.circle"
-              android_material_icon_name="account-circle"
-              size={32}
-              color={colors.primary}
-            />
-          </TouchableOpacity>
         </View>
 
-        {/* Patient List */}
         <ScrollView
           style={styles.scrollView}
           contentContainerStyle={styles.scrollContent}
@@ -226,7 +250,7 @@ export default function HomeScreen() {
         >
           <View style={styles.listHeader}>
             <View style={styles.listHeaderLeft}>
-              <Text style={styles.listTitle}>Active Patients</Text>
+              <Text style={styles.listTitle}>Patients</Text>
               <View style={styles.countBadge}>
                 <Text style={styles.patientCount}>{sortedPatients.length}</Text>
               </View>
@@ -239,14 +263,13 @@ export default function HomeScreen() {
               <IconSymbol
                 ios_icon_name="arrow.up.arrow.down"
                 android_material_icon_name="sort"
-                size={18}
+                size={16}
                 color={colors.iconSecondary}
               />
               <Text style={styles.sortButtonText}>{currentSortLabel}</Text>
             </TouchableOpacity>
           </View>
 
-          {/* Sort Menu */}
           {showSortMenu && (
             <View style={styles.sortMenu}>
               {(['status', 'name', 'date', 'location'] as SortOption[]).map((option, index) => {
@@ -286,12 +309,14 @@ export default function HomeScreen() {
             </View>
           ) : sortedPatients.length === 0 ? (
             <View style={styles.emptyState}>
-              <IconSymbol
-                ios_icon_name="person.badge.plus"
-                android_material_icon_name="person-add"
-                size={64}
-                color={colors.iconLight}
-              />
+              <View style={styles.emptyIconContainer}>
+                <IconSymbol
+                  ios_icon_name="person.badge.plus"
+                  android_material_icon_name="person-add"
+                  size={56}
+                  color={colors.iconLight}
+                />
+              </View>
               <Text style={styles.emptyStateTitle}>No Patients Yet</Text>
               <Text style={styles.emptyStateText}>
                 Add your first patient to start monitoring post-operative recovery
@@ -316,20 +341,33 @@ export default function HomeScreen() {
                 const alertIcon = getAlertIcon(patient.alertStatus);
                 const podText = `POD ${patient.postOpDay}`;
                 
-                // Display patient name or "Unnamed Patient" if blank
                 const displayName = patient.name && patient.name.trim() ? patient.name : 'Unnamed Patient';
                 
-                // Check if status is manually overridden
                 const isManualStatus = patient.statusMode === 'manual';
+                const isLastOpened = patient.id === lastOpenedPatientId;
 
                 return (
                   <TouchableOpacity
                     key={index}
-                    style={styles.patientCard}
+                    style={[
+                      styles.patientCard,
+                      isLastOpened && styles.patientCardLastOpened,
+                    ]}
                     onPress={() => handlePatientPress(patient.id)}
                     activeOpacity={0.7}
                   >
-                    {/* Alert Status Bar - Most Prominent */}
+                    {isLastOpened && (
+                      <View style={styles.lastOpenedBadge}>
+                        <IconSymbol
+                          ios_icon_name="clock.fill"
+                          android_material_icon_name="access-time"
+                          size={12}
+                          color={colors.accentWarm}
+                        />
+                        <Text style={styles.lastOpenedText}>Last viewed</Text>
+                      </View>
+                    )}
+
                     <View style={[styles.alertBar, { 
                       backgroundColor: alertBgColor,
                       borderLeftColor: alertColor,
@@ -337,7 +375,7 @@ export default function HomeScreen() {
                       <IconSymbol
                         ios_icon_name="circle.fill"
                         android_material_icon_name={alertIcon}
-                        size={14}
+                        size={12}
                         color={alertColor}
                       />
                       <Text style={[styles.alertLabel, { color: alertColor }]}>
@@ -351,7 +389,6 @@ export default function HomeScreen() {
                     </View>
 
                     <View style={styles.cardContent}>
-                      {/* Patient Info - Clear Hierarchy */}
                       <View style={styles.patientInfo}>
                         <Text style={styles.patientName}>{displayName}</Text>
                         
@@ -364,7 +401,7 @@ export default function HomeScreen() {
                               <IconSymbol
                                 ios_icon_name="location"
                                 android_material_icon_name="location-on"
-                                size={12}
+                                size={11}
                                 color={colors.textLight}
                               />
                               <Text style={styles.locationText}>{patient.hospitalLocation}</Text>
@@ -375,11 +412,10 @@ export default function HomeScreen() {
                         <Text style={styles.procedureType}>{patient.procedureType}</Text>
                       </View>
 
-                      {/* Chevron */}
                       <IconSymbol
                         ios_icon_name="chevron.right"
                         android_material_icon_name="chevron-right"
-                        size={18}
+                        size={20}
                         color={colors.iconLight}
                         style={styles.chevron}
                       />
@@ -388,7 +424,6 @@ export default function HomeScreen() {
                 );
               })}
 
-              {/* Floating Add Button */}
               <TouchableOpacity style={styles.fabButton} onPress={handleAddPatient}>
                 <IconSymbol
                   ios_icon_name="plus"
@@ -419,36 +454,34 @@ const styles = StyleSheet.create({
   },
   header: {
     backgroundColor: colors.backgroundAlt,
-    paddingHorizontal: spacing.xl,
-    paddingTop: spacing.md,
-    paddingBottom: spacing.md,
     borderBottomWidth: 1,
     borderBottomColor: colors.borderLight,
+  },
+  headerContent: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+    paddingHorizontal: spacing.xl,
+    paddingVertical: spacing.md,
   },
   headerLeft: {
     flex: 1,
+    gap: spacing.xs,
   },
   headerTitle: {
-    fontSize: typography.h3,
-    fontWeight: typography.semibold,
+    fontSize: typography.h4,
+    fontWeight: typography.bold,
     color: colors.text,
-    letterSpacing: -0.3,
-    marginBottom: spacing.xs,
+    letterSpacing: -0.2,
   },
-  disclaimerCompact: {
+  disclaimerBadge: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.xs,
   },
-  disclaimerIcon: {
-    opacity: 0.7,
-  },
   disclaimerText: {
     fontSize: typography.tiny,
-    fontWeight: typography.regular,
+    fontWeight: typography.medium,
     color: colors.textLight,
   },
   profileButton: {
@@ -458,7 +491,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   scrollContent: {
-    paddingTop: spacing.xl,
+    paddingTop: spacing.xxl,
   },
   listHeader: {
     flexDirection: 'row',
@@ -473,13 +506,13 @@ const styles = StyleSheet.create({
     gap: spacing.md,
   },
   listTitle: {
-    fontSize: typography.h4,
-    fontWeight: typography.semibold,
+    fontSize: typography.h3,
+    fontWeight: typography.bold,
     color: colors.text,
-    letterSpacing: -0.2,
+    letterSpacing: -0.3,
   },
   countBadge: {
-    backgroundColor: colors.borderLight,
+    backgroundColor: colors.primary,
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.xs,
     borderRadius: borderRadius.full,
@@ -488,8 +521,8 @@ const styles = StyleSheet.create({
   },
   patientCount: {
     fontSize: typography.caption,
-    fontWeight: typography.semibold,
-    color: colors.textSecondary,
+    fontWeight: typography.bold,
+    color: '#FFFFFF',
   },
   sortButton: {
     flexDirection: 'row',
@@ -504,17 +537,18 @@ const styles = StyleSheet.create({
   },
   sortButtonText: {
     fontSize: typography.caption,
-    fontWeight: typography.medium,
+    fontWeight: typography.semibold,
     color: colors.textSecondary,
   },
   sortMenu: {
     backgroundColor: colors.backgroundAlt,
     marginHorizontal: spacing.xl,
     marginBottom: spacing.lg,
-    borderRadius: borderRadius.md,
+    borderRadius: borderRadius.lg,
     borderWidth: 1,
     borderColor: colors.border,
     ...shadows.md,
+    overflow: 'hidden',
   },
   sortMenuItem: {
     flexDirection: 'row',
@@ -534,7 +568,7 @@ const styles = StyleSheet.create({
     color: colors.text,
   },
   sortMenuItemTextActive: {
-    fontWeight: typography.semibold,
+    fontWeight: typography.bold,
     color: colors.primary,
   },
   loadingContainer: {
@@ -554,8 +588,17 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.xxxxl,
     gap: spacing.lg,
   },
+  emptyIconContainer: {
+    width: 96,
+    height: 96,
+    borderRadius: 48,
+    backgroundColor: colors.borderLight,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: spacing.md,
+  },
   emptyStateTitle: {
-    fontSize: typography.h3,
+    fontSize: typography.h2,
     fontWeight: typography.bold,
     color: colors.text,
     textAlign: 'center',
@@ -565,16 +608,17 @@ const styles = StyleSheet.create({
     fontWeight: typography.regular,
     color: colors.textSecondary,
     textAlign: 'center',
-    lineHeight: 22,
+    lineHeight: 24,
+    maxWidth: 320,
   },
   addButton: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.sm,
     backgroundColor: colors.primary,
-    paddingHorizontal: spacing.xl,
-    paddingVertical: spacing.md,
-    borderRadius: borderRadius.md,
+    paddingHorizontal: spacing.xxl,
+    paddingVertical: spacing.lg,
+    borderRadius: borderRadius.lg,
     marginTop: spacing.md,
     ...shadows.md,
   },
@@ -592,6 +636,27 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
     overflow: 'hidden',
     ...shadows.sm,
+  },
+  patientCardLastOpened: {
+    borderWidth: 2,
+    borderColor: colors.highlightBorder,
+    backgroundColor: colors.highlight,
+    ...shadows.md,
+  },
+  lastOpenedBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.sm,
+    paddingBottom: spacing.xs,
+  },
+  lastOpenedText: {
+    fontSize: typography.tiny,
+    fontWeight: typography.bold,
+    color: colors.accentWarm,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
   },
   alertBar: {
     flexDirection: 'row',
@@ -615,7 +680,7 @@ const styles = StyleSheet.create({
     borderRadius: borderRadius.xs,
   },
   manualBadgeText: {
-    fontSize: typography.tiny,
+    fontSize: 9,
     fontWeight: typography.bold,
     color: '#FFFFFF',
     letterSpacing: 0.5,
@@ -625,7 +690,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: spacing.lg,
-    paddingTop: spacing.md,
+    paddingTop: spacing.lg,
     paddingBottom: spacing.lg,
   },
   patientInfo: {
@@ -633,11 +698,11 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
   },
   patientName: {
-    fontSize: typography.h3,
+    fontSize: typography.h2,
     fontWeight: typography.bold,
     color: colors.text,
-    letterSpacing: -0.3,
-    lineHeight: 26,
+    letterSpacing: -0.4,
+    lineHeight: 28,
   },
   metaRow: {
     flexDirection: 'row',
@@ -645,7 +710,7 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
   },
   podBadge: {
-    backgroundColor: colors.borderLight,
+    backgroundColor: colors.primary,
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.xs,
     borderRadius: borderRadius.sm,
@@ -653,7 +718,7 @@ const styles = StyleSheet.create({
   podText: {
     fontSize: typography.tiny,
     fontWeight: typography.bold,
-    color: colors.textSecondary,
+    color: '#FFFFFF',
     letterSpacing: 0.5,
   },
   locationBadge: {
@@ -680,9 +745,9 @@ const styles = StyleSheet.create({
     position: 'absolute',
     right: spacing.xl,
     bottom: spacing.xl,
-    width: 56,
-    height: 56,
-    borderRadius: 28,
+    width: 60,
+    height: 60,
+    borderRadius: 30,
     backgroundColor: colors.primary,
     justifyContent: 'center',
     alignItems: 'center',
