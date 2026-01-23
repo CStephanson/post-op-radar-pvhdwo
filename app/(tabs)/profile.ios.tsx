@@ -19,15 +19,14 @@ import { useAuth } from '@/contexts/AuthContext';
 import { UserProfile } from '@/types/patient';
 
 export default function ProfileScreen() {
-  console.log('ProfileScreen rendered');
+  console.log('ProfileScreen (iOS) rendered');
   const router = useRouter();
-  const { user, signOut } = useAuth();
+  const { user, signOut, isGuest, bearerToken } = useAuth();
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [deleteConfirmation, setDeleteConfirmation] = useState('');
   const [deleting, setDeleting] = useState(false);
-  const [debugMessage, setDebugMessage] = useState('');
 
   useEffect(() => {
     if (user) {
@@ -36,14 +35,61 @@ export default function ProfileScreen() {
   }, [user]);
 
   const loadProfile = async () => {
-    console.log('Loading user profile');
+    console.log('Loading user profile (iOS)');
     setLoading(true);
     try {
+      // Guest users don't have server-side profiles
+      if (isGuest) {
+        console.log('Guest user - no server profile to load');
+        setLoading(false);
+        return;
+      }
+
+      // CRITICAL: Check if token exists before attempting API call
+      if (!bearerToken) {
+        console.error('[Profile iOS] No bearer token found - session invalid');
+        Alert.alert(
+          'Session Expired',
+          'Your session has expired. Please sign in again.',
+          [
+            {
+              text: 'Sign In',
+              onPress: async () => {
+                await signOut();
+                router.replace('/auth');
+              },
+            },
+          ]
+        );
+        setLoading(false);
+        return;
+      }
+
       const { authenticatedGet } = await import('@/utils/api');
       const profileData = await authenticatedGet<any>('/api/profile');
       setProfile(profileData);
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error loading profile:', error);
+      
+      // Show user-friendly error for auth issues
+      if (error.message.includes('Session expired') || error.message.includes('sign in') || error.message.includes('Authentication token')) {
+        Alert.alert(
+          'Session Expired',
+          'Your session has expired. Please sign in again.',
+          [
+            {
+              text: 'Sign In',
+              onPress: async () => {
+                await signOut();
+                router.replace('/auth');
+              },
+            },
+          ]
+        );
+      } else {
+        // Other errors - show generic message
+        Alert.alert('Error', 'Failed to load profile. Please try again.');
+      }
     } finally {
       setLoading(false);
     }
@@ -51,36 +97,92 @@ export default function ProfileScreen() {
 
   const handleEditProfile = () => {
     console.log('User tapped edit profile button');
+    
+    if (isGuest) {
+      Alert.alert(
+        'Guest Mode',
+        'Profile editing requires a signed-in account. Would you like to create an account?',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Sign In',
+            onPress: async () => {
+              await signOut();
+              router.replace('/auth');
+            },
+          },
+        ]
+      );
+      return;
+    }
+    
     router.push('/profile-setup');
   };
 
   const handleDeleteAccount = () => {
     console.log('User tapped delete account button');
-    setDebugMessage('Delete Account clicked - opening confirmation modal');
+    
+    if (isGuest) {
+      Alert.alert(
+        'Guest Mode',
+        'You are using guest mode. There is no account to delete. Would you like to sign out?',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Sign Out',
+            style: 'destructive',
+            onPress: async () => {
+              await signOut();
+              router.replace('/auth');
+            },
+          },
+        ]
+      );
+      return;
+    }
+    
     setShowDeleteModal(true);
   };
 
   const confirmDeleteAccount = async () => {
-    console.log('User confirmed delete account');
-    setDebugMessage('Confirming deletion...');
+    console.log('User confirmed delete account (iOS)');
     
     if (deleteConfirmation !== 'DELETE') {
-      setDebugMessage('Delete failed: Confirmation text does not match');
       Alert.alert('Error', 'Please type DELETE to confirm account deletion');
       return;
     }
 
     setDeleting(true);
-    setDebugMessage('Deleting account and all data...');
 
     try {
+      // CRITICAL: Check if token exists before attempting API call
+      if (!bearerToken && !isGuest) {
+        console.error('[Profile iOS] No bearer token found - cannot delete account');
+        Alert.alert(
+          'Session Expired',
+          'Your session has expired. Please sign in again to delete your account.',
+          [
+            {
+              text: 'Sign In',
+              onPress: async () => {
+                await signOut();
+                router.replace('/auth');
+              },
+            },
+          ]
+        );
+        setDeleting(false);
+        setShowDeleteModal(false);
+        setDeleteConfirmation('');
+        return;
+      }
+
       const { authenticatedDelete } = await import('@/utils/api');
       
       console.log('Calling DELETE /api/account endpoint');
       await authenticatedDelete('/api/account', { confirmation: 'DELETE' });
       
       console.log('Account deleted successfully');
-      setDebugMessage('Delete success - account and all data removed');
       
       // Clear local session
       await signOut();
@@ -90,7 +192,7 @@ export default function ProfileScreen() {
         'Your account and all associated data have been permanently deleted.',
         [
           {
-            text: 'OK',
+              text: 'OK',
             onPress: () => {
               console.log('Navigating to login screen');
               router.replace('/auth');
@@ -100,9 +202,25 @@ export default function ProfileScreen() {
       );
     } catch (error: any) {
       console.error('Error deleting account:', error);
-      const errorMsg = error.message || 'Failed to delete account. Please try again.';
-      setDebugMessage(`Delete failed: ${errorMsg}`);
-      Alert.alert('Error', errorMsg);
+      
+      // Show user-friendly error
+      if (error.message.includes('Session expired') || error.message.includes('sign in') || error.message.includes('Authentication token')) {
+        Alert.alert(
+          'Session Expired',
+          'Your session has expired. Please sign in again to delete your account.',
+          [
+            {
+              text: 'Sign In',
+              onPress: async () => {
+                await signOut();
+                router.replace('/auth');
+              },
+            },
+          ]
+        );
+      } else {
+        Alert.alert('Error', error.message || 'Failed to delete account. Please try again.');
+      }
     } finally {
       setDeleting(false);
       setShowDeleteModal(false);
@@ -168,6 +286,11 @@ export default function ProfileScreen() {
   }
 
   const roleLabel = profile ? getRoleLabel(profile.role) : '';
+  
+  // Session debug info
+  const modeText = isGuest ? 'guest' : 'logged-in';
+  const tokenText = bearerToken ? 'yes' : 'no';
+  const userIdText = user?.id ? 'yes' : 'no';
 
   return (
     <SafeAreaView style={styles.safeArea} edges={['top']}>
@@ -176,12 +299,22 @@ export default function ProfileScreen() {
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
       >
-        {/* Debug message (temporary for preview mode) */}
-        {debugMessage ? (
-          <View style={styles.debugContainer}>
-            <Text style={styles.debugText}>{debugMessage}</Text>
+        {/* Session Debug (temporary for preview mode) */}
+        <View style={styles.debugContainer}>
+          <Text style={styles.debugTitle}>Session Debug</Text>
+          <View style={styles.debugRow}>
+            <Text style={styles.debugLabel}>Mode:</Text>
+            <Text style={styles.debugValue}>{modeText}</Text>
           </View>
-        ) : null}
+          <View style={styles.debugRow}>
+            <Text style={styles.debugLabel}>Token present:</Text>
+            <Text style={styles.debugValue}>{tokenText}</Text>
+          </View>
+          <View style={styles.debugRow}>
+            <Text style={styles.debugLabel}>UserId present:</Text>
+            <Text style={styles.debugValue}>{userIdText}</Text>
+          </View>
+        </View>
 
         <View style={styles.header}>
           <Text style={styles.headerTitle}>Profile</Text>
@@ -205,6 +338,12 @@ export default function ProfileScreen() {
           )}
           <Text style={styles.email}>{user?.email}</Text>
 
+          {isGuest && (
+            <View style={styles.guestBadge}>
+              <Text style={styles.guestBadgeText}>Guest Mode</Text>
+            </View>
+          )}
+
           <TouchableOpacity style={styles.editButton} onPress={handleEditProfile}>
             <IconSymbol
               ios_icon_name="pencil"
@@ -216,7 +355,7 @@ export default function ProfileScreen() {
           </TouchableOpacity>
         </View>
 
-        {profile && (
+        {profile && !isGuest && (
           <>
             <View style={styles.section}>
               <Text style={styles.sectionTitle}>Professional Information</Text>
@@ -290,7 +429,9 @@ export default function ProfileScreen() {
             size={18}
             color="#FFFFFF"
           />
-          <Text style={styles.deleteButtonText}>Delete Account</Text>
+          <Text style={styles.deleteButtonText}>
+            {isGuest ? 'Clear Guest Data' : 'Delete Account'}
+          </Text>
         </TouchableOpacity>
 
         <View style={styles.bottomSpacer} />
@@ -340,7 +481,6 @@ export default function ProfileScreen() {
                 onPress={() => {
                   setShowDeleteModal(false);
                   setDeleteConfirmation('');
-                  setDebugMessage('');
                 }}
                 disabled={deleting}
               >
@@ -394,11 +534,26 @@ const styles = StyleSheet.create({
     marginHorizontal: spacing.xl,
     marginTop: spacing.lg,
   },
-  debugText: {
+  debugTitle: {
     fontSize: typography.bodySmall,
-    fontWeight: typography.semibold,
+    fontWeight: typography.bold,
     color: colors.alertYellow,
-    textAlign: 'center',
+    marginBottom: spacing.xs,
+  },
+  debugRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: spacing.xs,
+  },
+  debugLabel: {
+    fontSize: typography.caption,
+    fontWeight: typography.medium,
+    color: colors.alertYellow,
+  },
+  debugValue: {
+    fontSize: typography.caption,
+    fontWeight: typography.bold,
+    color: colors.alertYellow,
   },
   loadingContainer: {
     flex: 1,
@@ -460,6 +615,20 @@ const styles = StyleSheet.create({
     fontWeight: typography.regular,
     color: colors.textLight,
     marginBottom: spacing.lg + spacing.xs,
+  },
+  guestBadge: {
+    backgroundColor: colors.alertYellowBg,
+    borderWidth: 1,
+    borderColor: colors.alertYellowBorder,
+    borderRadius: borderRadius.sm,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.xs,
+    marginBottom: spacing.md,
+  },
+  guestBadgeText: {
+    fontSize: typography.caption,
+    fontWeight: typography.bold,
+    color: colors.alertYellow,
   },
   editButton: {
     flexDirection: 'row',

@@ -16,6 +16,7 @@ import {
 import { StatusBar } from "expo-status-bar";
 import { WidgetProvider } from "@/contexts/WidgetContext";
 import { AuthProvider } from "@/contexts/AuthContext";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { BACKEND_URL } from "@/utils/api";
 // Note: Error logging is auto-initialized via index.ts import
 
@@ -86,6 +87,7 @@ export default function RootLayout() {
   return (
     <>
       <StatusBar style="auto" animated />
+      <ErrorBoundary>
         <ThemeProvider
           value={colorScheme === "dark" ? CustomDarkTheme : CustomDefaultTheme}
         >
@@ -110,6 +112,7 @@ export default function RootLayout() {
             </WidgetProvider>
           </AuthProvider>
         </ThemeProvider>
+      </ErrorBoundary>
     </>
   );
 }

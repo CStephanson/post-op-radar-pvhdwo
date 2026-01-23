@@ -120,7 +120,41 @@ export default function AddPatientScreen() {
       console.error('Error creating patient:', error);
       const errorMsg = error.message || 'Failed to add patient. Please try again.';
       setDebugMessage(`Save failed: ${errorMsg}`);
-      Alert.alert('Error', errorMsg);
+      
+      // Show user-friendly error for auth issues
+      if (errorMsg.includes('Session expired') || errorMsg.includes('sign in') || errorMsg.includes('Authentication token')) {
+        Alert.alert(
+          'Session Expired',
+          'Your session has expired. Please sign in again.',
+          [
+            {
+              text: 'Go to Login',
+              onPress: () => {
+                router.replace('/auth');
+              },
+            },
+          ]
+        );
+      } else if (errorMsg.includes('Guest mode')) {
+        Alert.alert(
+          'Guest Mode',
+          errorMsg,
+          [
+            {
+              text: 'OK',
+              style: 'cancel',
+            },
+            {
+              text: 'Sign In',
+              onPress: () => {
+                router.replace('/auth');
+              },
+            },
+          ]
+        );
+      } else {
+        Alert.alert('Error', errorMsg);
+      }
     } finally {
       setSaving(false);
     }

@@ -5,9 +5,10 @@ import * as SecureStore from "expo-secure-store";
 import { useRouter, useSegments } from "expo-router";
 import { authClient } from "@/lib/auth";
 
-const BEARER_TOKEN_KEY = "auth_bearer_token";
+const BEARER_TOKEN_KEY = "postopradar_bearer_token";
 const SESSION_FLAG_KEY = "postopradar_session_active";
 const USER_DATA_KEY = "postopradar_user_data";
+const IS_GUEST_KEY = "postopradar_is_guest";
 
 interface User {
   id: string;
@@ -19,6 +20,9 @@ interface User {
 interface AuthContextType {
   user: User | null;
   loading: boolean;
+  isGuest: boolean;
+  bearerToken: string | null;
+  isAuthenticated: boolean;
   signInWithEmail: (email: string, password: string) => Promise<void>;
   signUpWithEmail: (email: string, password: string, name?: string) => Promise<void>;
   signInWithGoogle: () => Promise<void>;
@@ -33,6 +37,8 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
+  const [isGuest, setIsGuest] = useState(false);
+  const [bearerToken, setBearerToken] = useState<string | null>(null);
   const router = useRouter();
   const segments = useSegments();
 
@@ -44,56 +50,84 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (loading) return;
 
-    const inAuthGroup = segments[0] === "auth" || segments[0] === "auth-callback" || segments[0] === "auth-popup";
+    const inAuthGroup = segments[0] === "auth" || segments[0] === "auth-callback" || segments[0] === "auth-popup" || segments[0] === "profile-setup";
 
-    console.log('[Auth] Navigation check - user:', user?.email, 'inAuthGroup:', inAuthGroup, 'segments:', segments);
+    console.log('[Auth] Navigation check - user:', user?.email, 'isGuest:', isGuest, 'hasToken:', !!bearerToken, 'inAuthGroup:', inAuthGroup, 'segments:', segments);
 
-    if (!user && !inAuthGroup) {
-      console.log('[Auth] No user and not in auth group, redirecting to /auth');
+    // CRITICAL: User is considered authenticated ONLY if:
+    // 1. They have a user object AND
+    // 2. Either they have a valid bearerToken (logged in) OR they are in guest mode
+    const isAuthenticated = !!user && (!!bearerToken || isGuest);
+
+    console.log('[Auth] isAuthenticated:', isAuthenticated, 'user:', !!user, 'bearerToken:', !!bearerToken, 'isGuest:', isGuest);
+
+    if (!isAuthenticated && !inAuthGroup) {
+      console.log('[Auth] No valid session, redirecting to /auth');
       router.replace("/auth");
-    } else if (user && inAuthGroup) {
-      console.log('[Auth] User authenticated and in auth group, redirecting to dashboard');
+    } else if (isAuthenticated && inAuthGroup) {
+      console.log('[Auth] User authenticated, redirecting to dashboard');
       router.replace("/(tabs)/(home)");
     }
-  }, [user, loading, segments]);
+  }, [user, loading, segments, bearerToken, isGuest, router]);
 
   const checkAuth = async () => {
     try {
       console.log('[Auth] Checking for existing session...');
       
-      // First check for local session flag (for preview mode)
-      const sessionActive = await getStorageItem(SESSION_FLAG_KEY);
+      // Check if user is guest
+      const guestFlag = await getStorageItem(IS_GUEST_KEY);
+      if (guestFlag === "true") {
+        console.log('[Auth] Guest session found');
+        const userData = await getStorageItem(USER_DATA_KEY);
+        if (userData) {
+          const parsedUser = JSON.parse(userData);
+          setUser(parsedUser);
+          setIsGuest(true);
+          setBearerToken(null); // Guests don't have tokens
+          setLoading(false);
+          return;
+        }
+      }
+
+      // Check for stored bearer token (authenticated user)
+      const storedToken = await getStorageItem(BEARER_TOKEN_KEY);
       const userData = await getStorageItem(USER_DATA_KEY);
       
-      if (sessionActive === "true" && userData) {
-        console.log('[Auth] Found local session, restoring user');
+      if (storedToken && userData) {
+        console.log('[Auth] Found stored token and user data, restoring session');
         const parsedUser = JSON.parse(userData);
         setUser(parsedUser);
+        setBearerToken(storedToken);
+        setIsGuest(false);
         setLoading(false);
         return;
       }
 
-      // Try to get session from backend
-      const session = await authClient.getSession();
-      if (session?.user) {
-        console.log('[Auth] Backend session found for user:', session.user.email);
-        const userData = {
-          id: session.user.id,
-          email: session.user.email,
-          name: session.user.name,
-          image: session.user.image,
-        };
-        setUser(userData);
-        
-        if (session.session?.token) {
+      // Try to get session from backend (Better Auth)
+      try {
+        const session = await authClient.getSession();
+        if (session?.user && session?.session?.token) {
+          console.log('[Auth] Backend session found for user:', session.user.email);
+          const userData = {
+            id: session.user.id,
+            email: session.user.email,
+            name: session.user.name,
+            image: session.user.image,
+          };
+          setUser(userData);
+          setBearerToken(session.session.token);
+          setIsGuest(false);
+          
+          // Persist session
           await storeBearerToken(session.session.token);
+          await setStorageItem(SESSION_FLAG_KEY, "true");
+          await setStorageItem(USER_DATA_KEY, JSON.stringify(userData));
+          await deleteStorageItem(IS_GUEST_KEY);
+        } else {
+          console.log('[Auth] No active backend session found');
         }
-        
-        // Store session flag and user data
-        await setStorageItem(SESSION_FLAG_KEY, "true");
-        await setStorageItem(USER_DATA_KEY, JSON.stringify(userData));
-      } else {
-        console.log('[Auth] No active session found');
+      } catch (error) {
+        console.log('[Auth] Backend session check failed (backend may be unavailable):', error);
       }
     } catch (error) {
       console.error("[Auth] Error checking auth:", error);
@@ -146,6 +180,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       } else {
         await SecureStore.setItemAsync(BEARER_TOKEN_KEY, token);
       }
+      setBearerToken(token);
+      console.log('[Auth] Bearer token stored successfully');
     } catch (error) {
       console.error("[Auth] Error storing bearer token:", error);
     }
@@ -158,6 +194,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       } else {
         await SecureStore.deleteItemAsync(BEARER_TOKEN_KEY);
       }
+      setBearerToken(null);
+      console.log('[Auth] Bearer token cleared');
     } catch (error) {
       console.error("[Auth] Error clearing bearer token:", error);
     }
@@ -174,25 +212,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       if (result.error) {
         console.error('[Auth] Backend sign in error:', result.error);
-        
-        // PREVIEW MODE: If backend auth fails, treat as successful for preview
-        console.log('[Auth] Backend unavailable, using preview mode authentication');
-        const previewUser = {
-          id: 'preview-' + Date.now(),
-          email: email,
-          name: email.split('@')[0],
-        };
-        
-        setUser(previewUser);
-        await setStorageItem(SESSION_FLAG_KEY, "true");
-        await setStorageItem(USER_DATA_KEY, JSON.stringify(previewUser));
-        
-        console.log('[Auth] Preview mode authentication successful, navigating to dashboard');
-        router.replace("/(tabs)/(home)");
-        return;
+        throw new Error(result.error.message || "Sign in failed");
       }
 
-      if (result.data?.user) {
+      if (result.data?.user && result.data?.session?.token) {
         console.log('[Auth] Backend authentication successful for:', result.data.user.email);
         const userData = {
           id: result.data.user.id,
@@ -202,35 +225,23 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         };
         
         setUser(userData);
+        setBearerToken(result.data.session.token);
+        setIsGuest(false);
 
-        if (result.data.session?.token) {
-          await storeBearerToken(result.data.session.token);
-        }
-        
-        // Store session flag and user data
+        // Persist session with token
+        await storeBearerToken(result.data.session.token);
         await setStorageItem(SESSION_FLAG_KEY, "true");
         await setStorageItem(USER_DATA_KEY, JSON.stringify(userData));
+        await deleteStorageItem(IS_GUEST_KEY);
         
         console.log('[Auth] Navigation to dashboard executing...');
         router.replace("/(tabs)/(home)");
+      } else {
+        throw new Error("Invalid response from authentication server");
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('[Auth] Sign in exception:', error);
-      
-      // PREVIEW MODE: On exception, treat as successful for preview
-      console.log('[Auth] Exception caught, using preview mode authentication');
-      const previewUser = {
-        id: 'preview-' + Date.now(),
-        email: email,
-        name: email.split('@')[0],
-      };
-      
-      setUser(previewUser);
-      await setStorageItem(SESSION_FLAG_KEY, "true");
-      await setStorageItem(USER_DATA_KEY, JSON.stringify(previewUser));
-      
-      console.log('[Auth] Preview mode authentication successful, navigating to dashboard');
-      router.replace("/(tabs)/(home)");
+      throw error; // Re-throw so UI can show error
     }
   };
 
@@ -246,25 +257,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       if (result.error) {
         console.error('[Auth] Backend sign up error:', result.error);
-        
-        // PREVIEW MODE: If backend auth fails, treat as successful for preview
-        console.log('[Auth] Backend unavailable, using preview mode for sign up');
-        const previewUser = {
-          id: 'preview-' + Date.now(),
-          email: email,
-          name: name || email.split('@')[0],
-        };
-        
-        setUser(previewUser);
-        await setStorageItem(SESSION_FLAG_KEY, "true");
-        await setStorageItem(USER_DATA_KEY, JSON.stringify(previewUser));
-        
-        console.log('[Auth] Preview mode sign up successful, navigating to dashboard');
-        router.replace("/(tabs)/(home)");
-        return;
+        throw new Error(result.error.message || "Sign up failed");
       }
 
-      if (result.data?.user) {
+      if (result.data?.user && result.data?.session?.token) {
         console.log('[Auth] Backend sign up successful for:', result.data.user.email);
         const userData = {
           id: result.data.user.id,
@@ -274,35 +270,23 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         };
         
         setUser(userData);
+        setBearerToken(result.data.session.token);
+        setIsGuest(false);
 
-        if (result.data.session?.token) {
-          await storeBearerToken(result.data.session.token);
-        }
-        
-        // Store session flag and user data
+        // Persist session with token
+        await storeBearerToken(result.data.session.token);
         await setStorageItem(SESSION_FLAG_KEY, "true");
         await setStorageItem(USER_DATA_KEY, JSON.stringify(userData));
+        await deleteStorageItem(IS_GUEST_KEY);
         
         console.log('[Auth] Navigation to dashboard executing...');
         router.replace("/(tabs)/(home)");
+      } else {
+        throw new Error("Invalid response from authentication server");
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('[Auth] Sign up exception:', error);
-      
-      // PREVIEW MODE: On exception, treat as successful for preview
-      console.log('[Auth] Exception caught, using preview mode for sign up');
-      const previewUser = {
-        id: 'preview-' + Date.now(),
-        email: email,
-        name: name || email.split('@')[0],
-      };
-      
-      setUser(previewUser);
-      await setStorageItem(SESSION_FLAG_KEY, "true");
-      await setStorageItem(USER_DATA_KEY, JSON.stringify(previewUser));
-      
-      console.log('[Auth] Preview mode sign up successful, navigating to dashboard');
-      router.replace("/(tabs)/(home)");
+      throw error; // Re-throw so UI can show error
     }
   };
 
@@ -379,8 +363,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     };
     
     setUser(guestUser);
+    setIsGuest(true);
+    setBearerToken(null); // Guests don't have tokens
+    
+    // Persist guest session (no token)
     await setStorageItem(SESSION_FLAG_KEY, "true");
     await setStorageItem(USER_DATA_KEY, JSON.stringify(guestUser));
+    await setStorageItem(IS_GUEST_KEY, "true");
+    await clearBearerToken(); // Ensure no token exists
     
     console.log('[Auth] Guest authentication successful, navigating to dashboard');
     router.replace("/(tabs)/(home)");
@@ -390,7 +380,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     console.log('[Auth] Sign out initiated');
     
     try {
-      await authClient.signOut();
+      if (!isGuest) {
+        await authClient.signOut();
+      }
     } catch (error) {
       console.error('[Auth] Error signing out from backend:', error);
     }
@@ -398,17 +390,27 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     await clearBearerToken();
     await deleteStorageItem(SESSION_FLAG_KEY);
     await deleteStorageItem(USER_DATA_KEY);
+    await deleteStorageItem(IS_GUEST_KEY);
     setUser(null);
+    setIsGuest(false);
+    setBearerToken(null);
     
     console.log('[Auth] Sign out complete, redirecting to login');
     router.replace("/auth");
   };
+
+  // CRITICAL: Compute isAuthenticated - single source of truth
+  // User is authenticated ONLY if they have a user AND (token OR guest mode)
+  const isAuthenticated = !!user && (!!bearerToken || isGuest);
 
   return (
     <AuthContext.Provider
       value={{
         user,
         loading,
+        isGuest,
+        bearerToken,
+        isAuthenticated,
         signInWithEmail,
         signUpWithEmail,
         signInWithGoogle,

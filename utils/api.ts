@@ -1,3 +1,4 @@
+
 import Constants from "expo-constants";
 import { Platform } from "react-native";
 import * as SecureStore from "expo-secure-store";
@@ -33,6 +34,24 @@ export const getBearerToken = async (): Promise<string | null> => {
   } catch (error) {
     console.error("[API] Error retrieving bearer token:", error);
     return null;
+  }
+};
+
+/**
+ * Check if user is in guest mode
+ */
+export const isGuestMode = async (): Promise<boolean> => {
+  try {
+    const IS_GUEST_KEY = "postopradar_is_guest";
+    if (Platform.OS === "web") {
+      return localStorage.getItem(IS_GUEST_KEY) === "true";
+    } else {
+      const value = await SecureStore.getItemAsync(IS_GUEST_KEY);
+      return value === "true";
+    }
+  } catch (error) {
+    console.error("[API] Error checking guest mode:", error);
+    return false;
   }
 };
 
@@ -139,6 +158,7 @@ export const apiDelete = async <T = any>(endpoint: string, data: any = {}): Prom
 /**
  * Authenticated API call helper
  * Automatically retrieves bearer token from storage and adds to Authorization header
+ * For guest users, throws a user-friendly error
  *
  * @param endpoint - API endpoint path
  * @param options - Fetch options (method, headers, body, etc.)
@@ -149,10 +169,16 @@ export const authenticatedApiCall = async <T = any>(
   endpoint: string,
   options?: RequestInit
 ): Promise<T> => {
+  // Check if user is in guest mode
+  const guestMode = await isGuestMode();
+  if (guestMode) {
+    throw new Error("This feature requires a signed-in account. Guest mode does not support saving data to the server.");
+  }
+
   const token = await getBearerToken();
 
   if (!token) {
-    throw new Error("Authentication token not found. Please sign in.");
+    throw new Error("Session expired. Please sign in again.");
   }
 
   return apiCall<T>(endpoint, {

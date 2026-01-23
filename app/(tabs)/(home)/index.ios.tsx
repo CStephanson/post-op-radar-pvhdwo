@@ -23,7 +23,7 @@ function resolveImageSource(source: string | number | any): any {
 }
 
 export default function HomeScreen() {
-  console.log('HomeScreen rendered');
+  console.log('HomeScreen (iOS) rendered');
   const router = useRouter();
   const { user, loading: authLoading } = useAuth();
   const [patients, setPatients] = useState<Patient[]>([]);
@@ -53,7 +53,7 @@ export default function HomeScreen() {
   };
 
   const loadPatients = async () => {
-    console.log('Loading patients for user');
+    console.log('Loading patients for user (iOS)');
     setLoading(true);
     try {
       const { authenticatedGet } = await import('@/utils/api');
@@ -77,7 +77,27 @@ export default function HomeScreen() {
       setPatients(patientsWithDates);
     } catch (error: any) {
       console.error('Error loading patients:', error);
-      Alert.alert('Error', error.message || 'Failed to load patients');
+      
+      // Show user-friendly error for auth issues
+      if (error.message.includes('Session expired') || error.message.includes('sign in') || error.message.includes('Authentication token')) {
+        Alert.alert(
+          'Session Expired',
+          'Your session has expired. Please sign in again.',
+          [
+            {
+              text: 'Sign In',
+              onPress: () => {
+                router.replace('/auth');
+              },
+            },
+          ]
+        );
+      } else if (error.message.includes('Guest mode')) {
+        // Guest mode - show info message
+        Alert.alert('Guest Mode', error.message);
+      } else {
+        Alert.alert('Error', error.message || 'Failed to load patients');
+      }
     } finally {
       setLoading(false);
     }
