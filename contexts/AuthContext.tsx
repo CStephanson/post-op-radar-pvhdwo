@@ -35,12 +35,14 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
+  console.log('[Auth] AuthProvider initializing...');
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
   const [isGuest, setIsGuest] = useState(false);
   const [bearerToken, setBearerToken] = useState<string | null>(null);
   const router = useRouter();
   const segments = useSegments();
+  console.log('[Auth] AuthProvider state initialized');
 
   const getStorageItem = useCallback(async (key: string): Promise<string | null> => {
     try {
@@ -108,41 +110,58 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const checkAuth = useCallback(async () => {
+    console.log('[Auth] ===== Starting auth check =====');
     try {
       console.log('[Auth] Checking for existing session...');
       
       // Check if user is guest
       const guestFlag = await getStorageItem(IS_GUEST_KEY);
+      console.log('[Auth] Guest flag:', guestFlag);
+      
       if (guestFlag === "true") {
-        console.log('[Auth] Guest session found');
+        console.log('[Auth] Guest session found, loading user data');
         const userData = await getStorageItem(USER_DATA_KEY);
         if (userData) {
           const parsedUser = JSON.parse(userData);
+          console.log('[Auth] Guest user loaded:', parsedUser.email);
           setUser(parsedUser);
           setIsGuest(true);
           setBearerToken(null); // Guests don't have tokens
           setLoading(false);
+          console.log('[Auth] ===== Auth check complete (guest) =====');
           return;
+        } else {
+          console.warn('[Auth] Guest flag set but no user data found');
         }
       }
 
       // Check for stored bearer token (authenticated user)
       const storedToken = await getStorageItem(BEARER_TOKEN_KEY);
       const userData = await getStorageItem(USER_DATA_KEY);
+      console.log('[Auth] Stored token exists:', !!storedToken, 'User data exists:', !!userData);
       
       if (storedToken && userData) {
         console.log('[Auth] Found stored token and user data, restoring session');
-        const parsedUser = JSON.parse(userData);
-        setUser(parsedUser);
-        setBearerToken(storedToken);
-        setIsGuest(false);
-        setLoading(false);
-        return;
+        try {
+          const parsedUser = JSON.parse(userData);
+          console.log('[Auth] Authenticated user loaded:', parsedUser.email);
+          setUser(parsedUser);
+          setBearerToken(storedToken);
+          setIsGuest(false);
+          setLoading(false);
+          console.log('[Auth] ===== Auth check complete (authenticated) =====');
+          return;
+        } catch (parseError) {
+          console.error('[Auth] Failed to parse stored user data:', parseError);
+        }
       }
 
       // Try to get session from backend (Better Auth)
+      console.log('[Auth] No stored session, checking backend...');
       try {
         const session = await authClient.getSession();
+        console.log('[Auth] Backend session response:', !!session, 'Has user:', !!session?.user, 'Has token:', !!session?.session?.token);
+        
         if (session?.user && session?.session?.token) {
           console.log('[Auth] Backend session found for user:', session.user.email);
           const userData = {
@@ -160,6 +179,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           await setStorageItem(SESSION_FLAG_KEY, "true");
           await setStorageItem(USER_DATA_KEY, JSON.stringify(userData));
           await deleteStorageItem(IS_GUEST_KEY);
+          console.log('[Auth] Backend session persisted');
         } else {
           console.log('[Auth] No active backend session found');
         }
@@ -169,7 +189,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     } catch (error) {
       console.error("[Auth] Error checking auth:", error);
     } finally {
+      console.log('[Auth] Setting loading to false');
       setLoading(false);
+      console.log('[Auth] ===== Auth check complete (no session) =====');
     }
   }, [getStorageItem, setStorageItem, deleteStorageItem, storeBearerToken]);
 
@@ -179,7 +201,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [checkAuth]);
 
   useEffect(() => {
-    if (loading) return;
+    if (loading) {
+      console.log('[Auth] Still loading, skipping navigation check');
+      return;
+    }
 
     const inAuthGroup = segments[0] === "auth" || segments[0] === "auth-callback" || segments[0] === "auth-popup" || segments[0] === "profile-setup";
 
@@ -192,12 +217,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     console.log('[Auth] isAuthenticated:', isAuthenticated, 'user:', !!user, 'bearerToken:', !!bearerToken, 'isGuest:', isGuest);
 
+    // Prevent redirect loops - only redirect if we're not already on the target route
     if (!isAuthenticated && !inAuthGroup) {
       console.log('[Auth] No valid session, redirecting to /auth');
-      router.replace("/auth");
+      try {
+        router.replace("/auth");
+      } catch (error) {
+        console.error('[Auth] Failed to redirect to /auth:', error);
+      }
     } else if (isAuthenticated && inAuthGroup) {
       console.log('[Auth] User authenticated, redirecting to dashboard');
-      router.replace("/(tabs)/(home)");
+      try {
+        router.replace("/(tabs)/(home)");
+      } catch (error) {
+        console.error('[Auth] Failed to redirect to dashboard:', error);
+      }
     }
   }, [user, loading, segments, bearerToken, isGuest, router]);
 

@@ -18,8 +18,12 @@ import { colors, typography, spacing } from "@/styles/commonStyles";
 type Mode = "signin" | "signup";
 
 export default function AuthScreen() {
+  console.log('[AuthScreen] Component rendering...');
+  
   const { signInWithEmail, signUpWithEmail, signInWithGoogle, signInWithApple, signInAsGuest, loading: authLoading } =
     useAuth();
+
+  console.log('[AuthScreen] Auth context loaded, authLoading:', authLoading);
 
   const [mode, setMode] = useState<Mode>("signin");
   const [email, setEmail] = useState("");
@@ -29,6 +33,7 @@ export default function AuthScreen() {
   const [debugStatus, setDebugStatus] = useState("");
 
   if (authLoading) {
+    console.log('[AuthScreen] Auth still loading, showing loading screen');
     return (
       <View style={styles.loadingContainer}>
         <ActivityIndicator size="large" color={colors.primary} />
@@ -36,6 +41,8 @@ export default function AuthScreen() {
       </View>
     );
   }
+
+  console.log('[AuthScreen] Rendering auth form');
 
   const handleEmailAuth = async () => {
     console.log('[AuthScreen] Email auth button pressed');

@@ -1,3 +1,4 @@
+
 import "react-native-reanimated";
 import React, { useEffect } from "react";
 import { useFonts } from "expo-font";
@@ -5,7 +6,7 @@ import { Stack } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import { SystemBars } from "react-native-edge-to-edge";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
-import { useColorScheme, Alert } from "react-native";
+import { useColorScheme, Alert, View, Text } from "react-native";
 import { useNetworkState } from "expo-network";
 import {
   DarkTheme,
@@ -18,13 +19,23 @@ import { WidgetProvider } from "@/contexts/WidgetContext";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { BACKEND_URL } from "@/utils/api";
-// Note: Error logging is auto-initialized via index.ts import
 
 // Prevent the splash screen from auto-hiding before asset loading is complete.
 SplashScreen.preventAutoHideAsync();
 
+// Global error handler to catch unhandled errors
+if (typeof ErrorUtils !== 'undefined') {
+  const originalHandler = ErrorUtils.getGlobalHandler();
+  ErrorUtils.setGlobalHandler((error, isFatal) => {
+    console.error('[App] Global error caught:', error, 'isFatal:', isFatal);
+    if (originalHandler) {
+      originalHandler(error, isFatal);
+    }
+  });
+}
+
 export const unstable_settings = {
-  initialRouteName: "(tabs)", // Ensure any route can link back to `/`
+  initialRouteName: "(tabs)",
 };
 
 export default function RootLayout() {
@@ -35,14 +46,32 @@ export default function RootLayout() {
   });
 
   useEffect(() => {
+    console.log('[App] Root layout mounted - app is starting');
+    console.log('[App] Backend URL:', BACKEND_URL);
+    
+    // Initialize error logging after app has started
+    try {
+      const errorLogger = require('@/utils/errorLogger');
+      if (errorLogger && errorLogger.setupErrorLogging) {
+        errorLogger.setupErrorLogging();
+        console.log('[App] Error logging initialized');
+      } else if (errorLogger && errorLogger.default && errorLogger.default.setupErrorLogging) {
+        errorLogger.default.setupErrorLogging();
+        console.log('[App] Error logging initialized (default export)');
+      } else {
+        console.warn('[App] Error logging module loaded but setupErrorLogging not found');
+      }
+    } catch (error) {
+      console.error('[App] Failed to initialize error logging:', error);
+    }
+  }, []);
+
+  useEffect(() => {
     if (loaded) {
+      console.log('[App] Fonts loaded, hiding splash screen');
       SplashScreen.hideAsync();
     }
   }, [loaded]);
-
-  useEffect(() => {
-    console.log('[App] Backend URL configured:', BACKEND_URL);
-  }, []);
 
   React.useEffect(() => {
     if (
@@ -57,62 +86,67 @@ export default function RootLayout() {
   }, [networkState.isConnected, networkState.isInternetReachable]);
 
   if (!loaded) {
-    return null;
+    console.log('[App] Fonts not loaded yet, showing loading screen');
+    // Show a loading screen instead of null to prevent blank screen
+    return (
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#fff' }}>
+        <Text style={{ fontSize: 18, fontWeight: '600', marginBottom: 8 }}>Loading Post-Op Radar...</Text>
+        <Text style={{ fontSize: 14, color: '#666' }}>Initializing app</Text>
+      </View>
+    );
   }
+
+  console.log('[App] Fonts loaded, rendering app layout');
 
   const CustomDefaultTheme: Theme = {
     ...DefaultTheme,
     dark: false,
     colors: {
-      primary: "rgb(0, 122, 255)", // System Blue
-      background: "rgb(242, 242, 247)", // Light mode background
-      card: "rgb(255, 255, 255)", // White cards/surfaces
-      text: "rgb(0, 0, 0)", // Black text for light mode
-      border: "rgb(216, 216, 220)", // Light gray for separators/borders
-      notification: "rgb(255, 59, 48)", // System Red
+      primary: "rgb(0, 122, 255)",
+      background: "rgb(242, 242, 247)",
+      card: "rgb(255, 255, 255)",
+      text: "rgb(0, 0, 0)",
+      border: "rgb(216, 216, 220)",
+      notification: "rgb(255, 59, 48)",
     },
   };
 
   const CustomDarkTheme: Theme = {
     ...DarkTheme,
     colors: {
-      primary: "rgb(10, 132, 255)", // System Blue (Dark Mode)
-      background: "rgb(1, 1, 1)", // True black background for OLED displays
-      card: "rgb(28, 28, 30)", // Dark card/surface color
-      text: "rgb(255, 255, 255)", // White text for dark mode
-      border: "rgb(44, 44, 46)", // Dark gray for separators/borders
-      notification: "rgb(255, 69, 58)", // System Red (Dark Mode)
+      primary: "rgb(10, 132, 255)",
+      background: "rgb(1, 1, 1)",
+      card: "rgb(28, 28, 30)",
+      text: "rgb(255, 255, 255)",
+      border: "rgb(44, 44, 46)",
+      notification: "rgb(255, 69, 58)",
     },
   };
+  
   return (
-    <>
+    <ErrorBoundary>
       <StatusBar style="auto" animated />
-      <ErrorBoundary>
-        <ThemeProvider
-          value={colorScheme === "dark" ? CustomDarkTheme : CustomDefaultTheme}
-        >
-          <AuthProvider>
-            <WidgetProvider>
-              <GestureHandlerRootView>
+      <ThemeProvider
+        value={colorScheme === "dark" ? CustomDarkTheme : CustomDefaultTheme}
+      >
+        <AuthProvider>
+          <WidgetProvider>
+            <GestureHandlerRootView style={{ flex: 1 }}>
               <Stack>
-                {/* Auth screens */}
                 <Stack.Screen name="auth" options={{ headerShown: false }} />
                 <Stack.Screen name="auth-popup" options={{ headerShown: false }} />
                 <Stack.Screen name="auth-callback" options={{ headerShown: false }} />
                 <Stack.Screen name="profile-setup" options={{ headerShown: false }} />
-                
-                {/* Main app with tabs */}
                 <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-                
-                {/* Patient info screen */}
+                <Stack.Screen name="add-patient" options={{ headerShown: true, title: 'Add Patient' }} />
+                <Stack.Screen name="patient/[id]" options={{ headerShown: true, title: 'Patient Details' }} />
                 <Stack.Screen name="patient-info/[id]" options={{ headerShown: true, title: 'Patient Information' }} />
               </Stack>
               <SystemBars style={"auto"} />
-              </GestureHandlerRootView>
-            </WidgetProvider>
-          </AuthProvider>
-        </ThemeProvider>
-      </ErrorBoundary>
-    </>
+            </GestureHandlerRootView>
+          </WidgetProvider>
+        </AuthProvider>
+      </ThemeProvider>
+    </ErrorBoundary>
   );
 }

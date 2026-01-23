@@ -41,7 +41,8 @@ export class ErrorBoundary extends Component<Props, State> {
   }
 
   componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
-    console.error("Error caught by boundary:", error, errorInfo);
+    console.error("[ErrorBoundary] Error caught:", error);
+    console.error("[ErrorBoundary] Component stack:", errorInfo.componentStack);
 
     const errorMessage = error.message || '';
     if (errorMessage.includes('Authentication token not found') || 
@@ -67,51 +68,66 @@ export class ErrorBoundary extends Component<Props, State> {
   };
 
   render() {
-    if (this.state.hasError) {
-      if (this.props.fallback) {
-        return this.props.fallback;
+    // Safety check: If we somehow get into a bad state, show error UI
+    try {
+      if (this.state.hasError) {
+        if (this.props.fallback) {
+          return this.props.fallback;
+        }
+
+        const errorMessage = this.state.error?.message || 'Unknown error';
+        const isAuthError = errorMessage.includes('Authentication token not found') || 
+                            errorMessage.includes('Session expired') ||
+                            errorMessage.includes('sign in') ||
+                            errorMessage.includes('Guest mode');
+
+        const titleText = isAuthError ? 'Session Issue' : 'Something went wrong';
+        const messageText = isAuthError 
+          ? errorMessage
+          : 'We're sorry for the inconvenience. The app encountered an error.';
+        const buttonText = isAuthError ? 'Continue' : 'Try Again';
+
+        const showErrorDetails = __DEV__ && this.state.error && !isAuthError;
+        const errorString = this.state.error ? this.state.error.toString() : 'No error details';
+        const componentStack = this.state.errorInfo ? this.state.errorInfo.componentStack : '';
+        const hasComponentStack = this.state.errorInfo !== null;
+
+        return (
+          <View style={styles.container}>
+            <Text style={styles.title}>{titleText}</Text>
+            <Text style={styles.message}>{messageText}</Text>
+
+            {showErrorDetails ? (
+              <ScrollView style={styles.errorDetails}>
+                <Text style={styles.errorTitle}>Error Details (Dev Only):</Text>
+                <Text style={styles.errorText}>{errorString}</Text>
+                {hasComponentStack ? (
+                  <Text style={styles.errorStack}>{componentStack}</Text>
+                ) : null}
+              </ScrollView>
+            ) : null}
+
+            <TouchableOpacity style={styles.button} onPress={this.handleReset}>
+              <Text style={styles.buttonText}>{buttonText}</Text>
+            </TouchableOpacity>
+          </View>
+        );
       }
 
-      const errorMessage = this.state.error?.message || '';
-      const isAuthError = errorMessage.includes('Authentication token not found') || 
-                          errorMessage.includes('Session expired') ||
-                          errorMessage.includes('sign in') ||
-                          errorMessage.includes('Guest mode');
-
-      const titleText = isAuthError ? 'Session Issue' : 'Oops! Something went wrong';
-      const messageText = isAuthError 
-        ? errorMessage
-        : 'We're sorry for the inconvenience. The app encountered an error.';
-      const buttonText = isAuthError ? 'Continue' : 'Try Again';
-
-      const showErrorDetails = __DEV__ && this.state.error && !isAuthError;
-      const errorString = this.state.error ? this.state.error.toString() : '';
-      const componentStack = this.state.errorInfo ? this.state.errorInfo.componentStack : '';
-      const hasComponentStack = this.state.errorInfo !== null;
-
+      return this.props.children;
+    } catch (renderError) {
+      // Last resort: If even rendering the error UI fails, show minimal fallback
+      console.error('[ErrorBoundary] Failed to render error UI:', renderError);
       return (
         <View style={styles.container}>
-          <Text style={styles.title}>{titleText}</Text>
-          <Text style={styles.message}>{messageText}</Text>
-
-          {showErrorDetails ? (
-            <ScrollView style={styles.errorDetails}>
-              <Text style={styles.errorTitle}>Error Details (Dev Only):</Text>
-              <Text style={styles.errorText}>{errorString}</Text>
-              {hasComponentStack ? (
-                <Text style={styles.errorStack}>{componentStack}</Text>
-              ) : null}
-            </ScrollView>
-          ) : null}
-
+          <Text style={styles.title}>Critical Error</Text>
+          <Text style={styles.message}>The app encountered a critical error and cannot continue.</Text>
           <TouchableOpacity style={styles.button} onPress={this.handleReset}>
-            <Text style={styles.buttonText}>{buttonText}</Text>
+            <Text style={styles.buttonText}>Reload App</Text>
           </TouchableOpacity>
         </View>
       );
     }
-
-    return this.props.children;
   }
 }
 
