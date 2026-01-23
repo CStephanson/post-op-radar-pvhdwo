@@ -14,14 +14,27 @@ import {
 } from "react-native";
 import { useAuth } from "@/contexts/AuthContext";
 import { colors, typography, spacing } from "@/styles/commonStyles";
+import Constants from "expo-constants";
 
 type Mode = "signin" | "signup";
+
+// Check if we're in preview/dev mode
+function isPreviewMode(): boolean {
+  return __DEV__ || Constants.appOwnership === 'expo';
+}
 
 export default function AuthScreen() {
   console.log('[AuthScreen] Component rendering...');
   
-  const { signInWithEmail, signUpWithEmail, signInWithGoogle, signInWithApple, signInAsGuest, loading: authLoading } =
-    useAuth();
+  const { 
+    signInWithEmail, 
+    signUpWithEmail, 
+    signInWithGoogle, 
+    signInWithApple, 
+    signInAsGuest,
+    signInAsDev,
+    loading: authLoading 
+  } = useAuth();
 
   console.log('[AuthScreen] Auth context loaded, authLoading:', authLoading);
 
@@ -31,6 +44,8 @@ export default function AuthScreen() {
   const [name, setName] = useState("");
   const [loading, setLoading] = useState(false);
   const [debugStatus, setDebugStatus] = useState("");
+
+  const showPreviewMode = isPreviewMode();
 
   if (authLoading) {
     console.log('[AuthScreen] Auth still loading, showing loading screen');
@@ -114,6 +129,23 @@ export default function AuthScreen() {
     }
   };
 
+  const handleDevLogin = async () => {
+    console.log('[AuthScreen] Dev login button pressed');
+    setLoading(true);
+    setDebugStatus("Signing in as dev user...");
+    
+    try {
+      await signInAsDev();
+      setDebugStatus("Dev login successful! Navigating...");
+    } catch (error: any) {
+      console.error('[AuthScreen] Dev login error:', error);
+      setDebugStatus("Error: " + (error.message || "Dev login failed"));
+      Alert.alert("Error", error.message || "Dev login failed");
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const modeLabel = mode === "signin" ? "Sign In" : "Sign Up";
   const switchModeText = mode === "signin"
     ? "Don't have an account? Sign Up"
@@ -126,10 +158,10 @@ export default function AuthScreen() {
     >
       <ScrollView contentContainerStyle={styles.scrollContent}>
         <View style={styles.content}>
-          <Text style={styles.title}>Post-Op Radar</Text>
+          <Text style={styles.title}>OpMGMT</Text>
           <Text style={styles.subtitle}>{modeLabel}</Text>
 
-          {mode === "signup" && (
+          {mode === "signup" ? (
             <TextInput
               style={styles.input}
               placeholder="Name (optional)"
@@ -138,7 +170,7 @@ export default function AuthScreen() {
               autoCapitalize="words"
               editable={!loading}
             />
-          )}
+          ) : null}
 
           <TextInput
             style={styles.input}
@@ -199,7 +231,7 @@ export default function AuthScreen() {
             <Text style={styles.socialButtonText}>Continue with Google</Text>
           </TouchableOpacity>
 
-          {Platform.OS === "ios" && (
+          {Platform.OS === "ios" ? (
             <TouchableOpacity
               style={[styles.socialButton, styles.appleButton]}
               onPress={() => handleSocialAuth("apple")}
@@ -209,7 +241,7 @@ export default function AuthScreen() {
                 Continue with Apple
               </Text>
             </TouchableOpacity>
-          )}
+          ) : null}
 
           <TouchableOpacity
             style={styles.guestButton}
@@ -218,6 +250,16 @@ export default function AuthScreen() {
           >
             <Text style={styles.guestButtonText}>Continue as Guest</Text>
           </TouchableOpacity>
+
+          {showPreviewMode ? (
+            <TouchableOpacity
+              style={styles.devButton}
+              onPress={handleDevLogin}
+              disabled={loading}
+            >
+              <Text style={styles.devButtonText}>🔧 Dev Login (Preview Only)</Text>
+            </TouchableOpacity>
+          ) : null}
 
           <Text style={styles.disclaimer}>
             For educational and demonstration purposes only.
@@ -354,6 +396,21 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: colors.textSecondary,
     fontWeight: "500",
+  },
+  devButton: {
+    height: 50,
+    borderWidth: 1,
+    borderColor: '#FF6B35',
+    borderRadius: 8,
+    justifyContent: "center",
+    alignItems: "center",
+    marginTop: spacing.md,
+    backgroundColor: 'rgba(255, 107, 53, 0.1)',
+  },
+  devButtonText: {
+    fontSize: 16,
+    color: '#FF6B35',
+    fontWeight: "600",
   },
   disclaimer: {
     marginTop: spacing.xl,

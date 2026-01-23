@@ -1,7 +1,8 @@
+
 {
   "expo": {
-    "name": "Post-Op Radar",
-    "slug": "Post-Op Radar",
+    "name": "OpMGMT",
+    "slug": "OpMGMT",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/natively-dark.png",
@@ -36,7 +37,7 @@
       "expo-router",
       "expo-web-browser"
     ],
-    "scheme": "postopradar",
+    "scheme": "opmgmt",
     "experiments": {
       "typedRoutes": true
     },

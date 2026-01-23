@@ -218,7 +218,7 @@ export default function HomeScreen() {
         <View style={styles.header}>
           <View style={styles.headerContent}>
             <View style={styles.headerLeft}>
-              <Text style={styles.headerTitle}>Post-Op Radar</Text>
+              <Text style={styles.headerTitle}>OpMGMT</Text>
               <View style={styles.disclaimerBadge}>
                 <IconSymbol
                   ios_icon_name="info.circle.fill"

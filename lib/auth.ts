@@ -1,3 +1,4 @@
+
 import { createAuthClient } from "better-auth/react";
 import { expoClient } from "@better-auth/expo/client";
 import * as SecureStore from "expo-secure-store";
@@ -6,7 +7,7 @@ import Constants from "expo-constants";
 
 const API_URL = Constants.expoConfig?.extra?.backendUrl || "";
 
-export const BEARER_TOKEN_KEY = "postopradar_bearer_token";
+export const BEARER_TOKEN_KEY = "opmgmt_bearer_token";
 
 // Platform-specific storage: localStorage for web, SecureStore for native
 const storage = Platform.OS === "web"
@@ -21,8 +22,8 @@ export const authClient = createAuthClient({
   baseURL: API_URL,
   plugins: [
     expoClient({
-      scheme: "postopradar",
-      storagePrefix: "postopradar",
+      scheme: "opmgmt",
+      storagePrefix: "opmgmt",
       storage,
     }),
   ],

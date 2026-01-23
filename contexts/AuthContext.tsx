@@ -4,11 +4,12 @@ import { Platform } from "react-native";
 import * as SecureStore from "expo-secure-store";
 import { useRouter, useSegments } from "expo-router";
 import { authClient } from "@/lib/auth";
+import Constants from "expo-constants";
 
-const BEARER_TOKEN_KEY = "postopradar_bearer_token";
-const SESSION_FLAG_KEY = "postopradar_session_active";
-const USER_DATA_KEY = "postopradar_user_data";
-const IS_GUEST_KEY = "postopradar_is_guest";
+const BEARER_TOKEN_KEY = "opmgmt_bearer_token";
+const SESSION_FLAG_KEY = "opmgmt_session_active";
+const USER_DATA_KEY = "opmgmt_user_data";
+const IS_GUEST_KEY = "opmgmt_is_guest";
 
 interface User {
   id: string;
@@ -29,10 +30,21 @@ interface AuthContextType {
   signInWithApple: () => Promise<void>;
   signInWithGitHub: () => Promise<void>;
   signInAsGuest: () => Promise<void>;
+  signInAsDev: () => Promise<void>;
   signOut: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
+
+// Helper to normalize email (trim whitespace, convert to lowercase)
+function normalizeEmail(email: string): string {
+  return email.trim().toLowerCase();
+}
+
+// Check if we're in preview/dev mode
+function isPreviewMode(): boolean {
+  return __DEV__ || Constants.appOwnership === 'expo';
+}
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   console.log('[Auth] ===== AuthProvider initializing =====');
@@ -240,17 +252,29 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [user, loading, segments, bearerToken, isGuest, router, isNavigating]);
 
   const signInWithEmail = async (email: string, password: string) => {
-    console.log('[Auth] Sign in with email:', email);
+    const normalizedEmail = normalizeEmail(email);
+    console.log('[Auth] Sign in with email:', normalizedEmail);
     
     try {
       const result = await authClient.signIn.email({
-        email,
+        email: normalizedEmail,
         password,
       });
 
       if (result.error) {
         console.error('[Auth] Backend sign in error:', result.error);
-        throw new Error(result.error.message || "Sign in failed");
+        
+        // Provide specific error messages
+        const errorMessage = result.error.message || "Sign in failed";
+        if (errorMessage.toLowerCase().includes('user not found') || errorMessage.toLowerCase().includes('no user')) {
+          throw new Error("No account found with this email. Please sign up first.");
+        } else if (errorMessage.toLowerCase().includes('password') || errorMessage.toLowerCase().includes('credentials')) {
+          throw new Error("Incorrect password. Please try again.");
+        } else if (errorMessage.toLowerCase().includes('network') || errorMessage.toLowerCase().includes('unavailable')) {
+          throw new Error("Authentication service unavailable. Please try guest mode or dev login.");
+        } else {
+          throw new Error(errorMessage);
+        }
       }
 
       if (result.data?.user && result.data?.session?.token) {
@@ -284,18 +308,32 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const signUpWithEmail = async (email: string, password: string, name?: string) => {
-    console.log('[Auth] Sign up with email:', email);
+    const normalizedEmail = normalizeEmail(email);
+    console.log('[Auth] Sign up with email:', normalizedEmail);
     
     try {
       const result = await authClient.signUp.email({
-        email,
+        email: normalizedEmail,
         password,
-        name,
+        name: name || normalizedEmail.split('@')[0],
       });
 
       if (result.error) {
         console.error('[Auth] Backend sign up error:', result.error);
-        throw new Error(result.error.message || "Sign up failed");
+        
+        // Provide specific error messages
+        const errorMessage = result.error.message || "Sign up failed";
+        if (errorMessage.toLowerCase().includes('already exists') || errorMessage.toLowerCase().includes('duplicate')) {
+          throw new Error("An account with this email already exists. Please sign in instead.");
+        } else if (errorMessage.toLowerCase().includes('password')) {
+          throw new Error("Password must be at least 8 characters long.");
+        } else if (errorMessage.toLowerCase().includes('email')) {
+          throw new Error("Please enter a valid email address.");
+        } else if (errorMessage.toLowerCase().includes('network') || errorMessage.toLowerCase().includes('unavailable')) {
+          throw new Error("Authentication service unavailable. Please try guest mode or dev login.");
+        } else {
+          throw new Error(errorMessage);
+        }
       }
 
       if (result.data?.user && result.data?.session?.token) {
@@ -396,7 +434,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     
     const guestUser = {
       id: 'guest-' + Date.now(),
-      email: 'guest@postopradar.local',
+      email: 'guest@opmgmt.local',
       name: 'Guest User',
     };
     
@@ -411,6 +449,36 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     await clearBearerToken();
     
     console.log('[Auth] Guest authentication successful, navigating to dashboard');
+    router.replace("/(tabs)/(home)");
+  };
+
+  const signInAsDev = async () => {
+    console.log('[Auth] Dev login initiated');
+    
+    if (!isPreviewMode()) {
+      throw new Error("Dev login is only available in preview/development mode");
+    }
+    
+    const devUser = {
+      id: 'dev-' + Date.now(),
+      email: 'dev@opmgmt.local',
+      name: 'Dev User',
+    };
+    
+    // Create a mock token for dev mode
+    const mockToken = 'dev-token-' + Date.now();
+    
+    setUser(devUser);
+    setIsGuest(false);
+    setBearerToken(mockToken);
+    
+    // Persist dev session with mock token
+    await storeBearerToken(mockToken);
+    await setStorageItem(SESSION_FLAG_KEY, "true");
+    await setStorageItem(USER_DATA_KEY, JSON.stringify(devUser));
+    await deleteStorageItem(IS_GUEST_KEY);
+    
+    console.log('[Auth] Dev authentication successful, navigating to dashboard');
     router.replace("/(tabs)/(home)");
   };
 
@@ -454,6 +522,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         signInWithApple,
         signInWithGitHub,
         signInAsGuest,
+        signInAsDev,
         signOut,
       }}
     >
