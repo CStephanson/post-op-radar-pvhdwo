@@ -15,6 +15,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams, Stack } from 'expo-router';
 import { colors, typography, spacing, borderRadius, shadows } from '@/styles/commonStyles';
 import { IconSymbol } from '@/components/IconSymbol';
+import { useUnsavedChanges } from '@/hooks/useUnsavedChanges';
 import DateTimePicker from '@react-native-community/datetimepicker';
 
 export default function PatientInfoScreen() {
@@ -45,6 +46,72 @@ export default function PatientInfoScreen() {
   // Manual status override fields
   const [statusMode, setStatusMode] = useState<'auto' | 'manual'>('auto');
   const [manualStatus, setManualStatus] = useState<'green' | 'orange' | 'red'>('green');
+  
+  // Track original values for dirty checking
+  const [originalValues, setOriginalValues] = useState({
+    name: '',
+    idStatement: '',
+    procedureType: '',
+    preOpDiagnosis: '',
+    postOpDiagnosis: '',
+    specimensTaken: '',
+    estimatedBloodLoss: '',
+    complications: '',
+    operationDateTime: new Date(),
+    surgeon: '',
+    anesthesiologist: '',
+    anesthesiaType: '',
+    clinicalStatus: '',
+    hospitalLocation: '',
+    statusMode: 'auto' as 'auto' | 'manual',
+    manualStatus: 'green' as 'green' | 'orange' | 'red',
+  });
+
+  // Check if form has unsaved changes
+  const hasUnsavedChanges =
+    name !== originalValues.name ||
+    idStatement !== originalValues.idStatement ||
+    procedureType !== originalValues.procedureType ||
+    preOpDiagnosis !== originalValues.preOpDiagnosis ||
+    postOpDiagnosis !== originalValues.postOpDiagnosis ||
+    specimensTaken !== originalValues.specimensTaken ||
+    estimatedBloodLoss !== originalValues.estimatedBloodLoss ||
+    complications !== originalValues.complications ||
+    operationDateTime.getTime() !== originalValues.operationDateTime.getTime() ||
+    surgeon !== originalValues.surgeon ||
+    anesthesiologist !== originalValues.anesthesiologist ||
+    anesthesiaType !== originalValues.anesthesiaType ||
+    clinicalStatus !== originalValues.clinicalStatus ||
+    hospitalLocation !== originalValues.hospitalLocation ||
+    statusMode !== originalValues.statusMode ||
+    manualStatus !== originalValues.manualStatus;
+
+  // Unsaved changes protection
+  const { handleBackPress, isNavigating } = useUnsavedChanges({
+    hasUnsavedChanges,
+    onSave: async () => {
+      await handleSave(false); // Save without navigating
+    },
+    onDiscard: () => {
+      // Revert to original values
+      setName(originalValues.name);
+      setIdStatement(originalValues.idStatement);
+      setProcedureType(originalValues.procedureType);
+      setPreOpDiagnosis(originalValues.preOpDiagnosis);
+      setPostOpDiagnosis(originalValues.postOpDiagnosis);
+      setSpecimensTaken(originalValues.specimensTaken);
+      setEstimatedBloodLoss(originalValues.estimatedBloodLoss);
+      setComplications(originalValues.complications);
+      setOperationDateTime(originalValues.operationDateTime);
+      setSurgeon(originalValues.surgeon);
+      setAnesthesiologist(originalValues.anesthesiologist);
+      setAnesthesiaType(originalValues.anesthesiaType);
+      setClinicalStatus(originalValues.clinicalStatus);
+      setHospitalLocation(originalValues.hospitalLocation);
+      setStatusMode(originalValues.statusMode);
+      setManualStatus(originalValues.manualStatus);
+    },
+  });
 
   useEffect(() => {
     loadPatientInfo();
@@ -57,24 +124,42 @@ export default function PatientInfoScreen() {
       const { authenticatedGet } = await import('@/utils/api');
       const patient = await authenticatedGet<any>(`/api/patients/${id}`);
       
-      setName(patient.name || '');
-      setIdStatement(patient.idStatement || '');
-      setProcedureType(patient.procedureType || '');
-      setPreOpDiagnosis(patient.preOpDiagnosis || '');
-      setPostOpDiagnosis(patient.postOpDiagnosis || '');
-      setSpecimensTaken(patient.specimensTaken || '');
-      setEstimatedBloodLoss(patient.estimatedBloodLoss || '');
-      setComplications(patient.complications || '');
-      setOperationDateTime(patient.operationDateTime ? new Date(patient.operationDateTime) : new Date());
-      setSurgeon(patient.surgeon || '');
-      setAnesthesiologist(patient.anesthesiologist || '');
-      setAnesthesiaType(patient.anesthesiaType || '');
-      setClinicalStatus(patient.clinicalStatus || '');
-      setHospitalLocation(patient.hospitalLocation || '');
+      const values = {
+        name: patient.name || '',
+        idStatement: patient.idStatement || '',
+        procedureType: patient.procedureType || '',
+        preOpDiagnosis: patient.preOpDiagnosis || '',
+        postOpDiagnosis: patient.postOpDiagnosis || '',
+        specimensTaken: patient.specimensTaken || '',
+        estimatedBloodLoss: patient.estimatedBloodLoss || '',
+        complications: patient.complications || '',
+        operationDateTime: patient.operationDateTime ? new Date(patient.operationDateTime) : new Date(),
+        surgeon: patient.surgeon || '',
+        anesthesiologist: patient.anesthesiologist || '',
+        anesthesiaType: patient.anesthesiaType || '',
+        clinicalStatus: patient.clinicalStatus || '',
+        hospitalLocation: patient.hospitalLocation || '',
+        statusMode: patient.statusMode || 'auto',
+        manualStatus: patient.manualStatus || 'green',
+      };
       
-      // Load manual status override fields
-      setStatusMode(patient.statusMode || 'auto');
-      setManualStatus(patient.manualStatus || 'green');
+      setName(values.name);
+      setIdStatement(values.idStatement);
+      setProcedureType(values.procedureType);
+      setPreOpDiagnosis(values.preOpDiagnosis);
+      setPostOpDiagnosis(values.postOpDiagnosis);
+      setSpecimensTaken(values.specimensTaken);
+      setEstimatedBloodLoss(values.estimatedBloodLoss);
+      setComplications(values.complications);
+      setOperationDateTime(values.operationDateTime);
+      setSurgeon(values.surgeon);
+      setAnesthesiologist(values.anesthesiologist);
+      setAnesthesiaType(values.anesthesiaType);
+      setClinicalStatus(values.clinicalStatus);
+      setHospitalLocation(values.hospitalLocation);
+      setStatusMode(values.statusMode);
+      setManualStatus(values.manualStatus);
+      setOriginalValues(values);
     } catch (error: any) {
       console.error('Error loading patient info:', error);
       Alert.alert('Error', error.message || 'Failed to load patient information');
@@ -83,8 +168,8 @@ export default function PatientInfoScreen() {
     }
   };
 
-  const handleSave = async () => {
-    console.log('User tapped save button');
+  const handleSave = async (shouldNavigate: boolean = true) => {
+    console.log('Saving patient info, shouldNavigate:', shouldNavigate);
     
     setSaving(true);
     try {
@@ -106,7 +191,6 @@ export default function PatientInfoScreen() {
         anesthesiaType: anesthesiaType.trim() || '',
         clinicalStatus: clinicalStatus.trim() || '',
         hospitalLocation: hospitalLocation.trim() || '',
-        // Manual status override fields
         statusMode,
         manualStatus,
       };
@@ -121,32 +205,55 @@ export default function PatientInfoScreen() {
       const savedPatient = await authenticatedGet<any>(`/api/patients/${id}`);
       
       // Update local state with canonical version from storage
-      setName(savedPatient.name || '');
-      setIdStatement(savedPatient.idStatement || '');
-      setProcedureType(savedPatient.procedureType || '');
-      setPreOpDiagnosis(savedPatient.preOpDiagnosis || '');
-      setPostOpDiagnosis(savedPatient.postOpDiagnosis || '');
-      setSpecimensTaken(savedPatient.specimensTaken || '');
-      setEstimatedBloodLoss(savedPatient.estimatedBloodLoss || '');
-      setComplications(savedPatient.complications || '');
-      setOperationDateTime(savedPatient.operationDateTime ? new Date(savedPatient.operationDateTime) : new Date());
-      setSurgeon(savedPatient.surgeon || '');
-      setAnesthesiologist(savedPatient.anesthesiologist || '');
-      setAnesthesiaType(savedPatient.anesthesiaType || '');
-      setClinicalStatus(savedPatient.clinicalStatus || '');
-      setHospitalLocation(savedPatient.hospitalLocation || '');
-      setStatusMode(savedPatient.statusMode || 'auto');
-      setManualStatus(savedPatient.manualStatus || 'green');
+      const savedValues = {
+        name: savedPatient.name || '',
+        idStatement: savedPatient.idStatement || '',
+        procedureType: savedPatient.procedureType || '',
+        preOpDiagnosis: savedPatient.preOpDiagnosis || '',
+        postOpDiagnosis: savedPatient.postOpDiagnosis || '',
+        specimensTaken: savedPatient.specimensTaken || '',
+        estimatedBloodLoss: savedPatient.estimatedBloodLoss || '',
+        complications: savedPatient.complications || '',
+        operationDateTime: savedPatient.operationDateTime ? new Date(savedPatient.operationDateTime) : new Date(),
+        surgeon: savedPatient.surgeon || '',
+        anesthesiologist: savedPatient.anesthesiologist || '',
+        anesthesiaType: savedPatient.anesthesiaType || '',
+        clinicalStatus: savedPatient.clinicalStatus || '',
+        hospitalLocation: savedPatient.hospitalLocation || '',
+        statusMode: savedPatient.statusMode || 'auto',
+        manualStatus: savedPatient.manualStatus || 'green',
+      };
+      
+      setName(savedValues.name);
+      setIdStatement(savedValues.idStatement);
+      setProcedureType(savedValues.procedureType);
+      setPreOpDiagnosis(savedValues.preOpDiagnosis);
+      setPostOpDiagnosis(savedValues.postOpDiagnosis);
+      setSpecimensTaken(savedValues.specimensTaken);
+      setEstimatedBloodLoss(savedValues.estimatedBloodLoss);
+      setComplications(savedValues.complications);
+      setOperationDateTime(savedValues.operationDateTime);
+      setSurgeon(savedValues.surgeon);
+      setAnesthesiologist(savedValues.anesthesiologist);
+      setAnesthesiaType(savedValues.anesthesiaType);
+      setClinicalStatus(savedValues.clinicalStatus);
+      setHospitalLocation(savedValues.hospitalLocation);
+      setStatusMode(savedValues.statusMode);
+      setManualStatus(savedValues.manualStatus);
+      setOriginalValues(savedValues);
       
       // Show success feedback
       Alert.alert('Saved', 'Patient information saved successfully!');
       
-      // Navigate back after save completes
-      router.back();
+      // Navigate back after save completes (if requested)
+      if (shouldNavigate) {
+        router.back();
+      }
     } catch (error: any) {
       console.error('Error saving patient info:', error);
       // Show clear error feedback - do not silently drop fields
       Alert.alert('Error', error.message || 'Failed to save patient information. Please try again.');
+      throw error; // Re-throw so useUnsavedChanges knows save failed
     } finally {
       setSaving(false);
     }
@@ -194,6 +301,7 @@ export default function PatientInfoScreen() {
   };
 
   const dateText = formatDate(operationDateTime);
+  const isSaving = saving || isNavigating;
 
   if (loading) {
     return (
@@ -224,6 +332,16 @@ export default function PatientInfoScreen() {
             backgroundColor: colors.backgroundAlt,
           },
           headerTintColor: colors.primary,
+          headerLeft: () => (
+            <TouchableOpacity onPress={handleBackPress} style={styles.backButton}>
+              <IconSymbol
+                ios_icon_name="chevron.left"
+                android_material_icon_name="arrow-back"
+                size={24}
+                color={colors.primary}
+              />
+            </TouchableOpacity>
+          ),
         }}
       />
       <ScrollView
@@ -565,11 +683,11 @@ export default function PatientInfoScreen() {
         {/* Action Buttons */}
         <View style={styles.actions}>
           <TouchableOpacity
-            style={[styles.saveButton, saving && styles.saveButtonDisabled]}
-            onPress={handleSave}
-            disabled={saving}
+            style={[styles.saveButton, isSaving && styles.saveButtonDisabled]}
+            onPress={() => handleSave(true)}
+            disabled={isSaving}
           >
-            {saving ? (
+            {isSaving ? (
               <ActivityIndicator color="#FFFFFF" />
             ) : (
               <>
@@ -775,5 +893,8 @@ const styles = StyleSheet.create({
     fontWeight: typography.regular,
     color: colors.textLight,
     textAlign: 'center',
+  },
+  backButton: {
+    padding: spacing.sm,
   },
 });

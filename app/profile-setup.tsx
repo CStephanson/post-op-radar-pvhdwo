@@ -12,10 +12,11 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useRouter } from 'expo-router';
+import { useRouter, Stack } from 'expo-router';
 import { colors, typography, spacing, borderRadius, shadows } from '@/styles/commonStyles';
 import { IconSymbol } from '@/components/IconSymbol';
 import { useAuth } from '@/contexts/AuthContext';
+import { useUnsavedChanges } from '@/hooks/useUnsavedChanges';
 import * as ImagePicker from 'expo-image-picker';
 
 type UserRole = 'medical_student' | 'resident' | 'fellow' | 'staff_physician';
@@ -34,6 +35,45 @@ export default function ProfileSetupScreen() {
   const [profilePicture, setProfilePicture] = useState('');
   const [loading, setLoading] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
+  
+  // Track original values for dirty checking
+  const [originalValues, setOriginalValues] = useState({
+    fullName: '',
+    pronouns: '',
+    role: 'medical_student' as UserRole,
+    roleYear: '',
+    residencyProgram: '',
+    affiliation: '',
+    profilePicture: '',
+  });
+
+  // Check if form has unsaved changes
+  const hasUnsavedChanges =
+    fullName !== originalValues.fullName ||
+    pronouns !== originalValues.pronouns ||
+    role !== originalValues.role ||
+    roleYear !== originalValues.roleYear ||
+    residencyProgram !== originalValues.residencyProgram ||
+    affiliation !== originalValues.affiliation ||
+    profilePicture !== originalValues.profilePicture;
+
+  // Unsaved changes protection
+  const { handleBackPress, isNavigating } = useUnsavedChanges({
+    hasUnsavedChanges,
+    onSave: async () => {
+      await handleSave(false); // Save without navigating
+    },
+    onDiscard: () => {
+      // Revert to original values
+      setFullName(originalValues.fullName);
+      setPronouns(originalValues.pronouns);
+      setRole(originalValues.role);
+      setRoleYear(originalValues.roleYear);
+      setResidencyProgram(originalValues.residencyProgram);
+      setAffiliation(originalValues.affiliation);
+      setProfilePicture(originalValues.profilePicture);
+    },
+  });
 
   useEffect(() => {
     loadExistingProfile();
@@ -45,13 +85,24 @@ export default function ProfileSetupScreen() {
       const profile = await authenticatedGet<any>('/api/profile');
       
       // Profile exists, populate the form
-      setFullName(profile.fullName || '');
-      setPronouns(profile.pronouns || '');
-      setRole(profile.role || 'medical_student');
-      setRoleYear(profile.roleYear?.toString() || '');
-      setResidencyProgram(profile.residencyProgram || '');
-      setAffiliation(profile.affiliation || '');
-      setProfilePicture(profile.profilePicture || '');
+      const values = {
+        fullName: profile.fullName || '',
+        pronouns: profile.pronouns || '',
+        role: profile.role || 'medical_student',
+        roleYear: profile.roleYear?.toString() || '',
+        residencyProgram: profile.residencyProgram || '',
+        affiliation: profile.affiliation || '',
+        profilePicture: profile.profilePicture || '',
+      };
+      
+      setFullName(values.fullName);
+      setPronouns(values.pronouns);
+      setRole(values.role);
+      setRoleYear(values.roleYear);
+      setResidencyProgram(values.residencyProgram);
+      setAffiliation(values.affiliation);
+      setProfilePicture(values.profilePicture);
+      setOriginalValues(values);
       setIsEditing(true);
     } catch (error: any) {
       // Profile doesn't exist yet, that's okay
@@ -74,8 +125,8 @@ export default function ProfileSetupScreen() {
     }
   };
 
-  const handleSave = async () => {
-    console.log('User tapped save profile button');
+  const handleSave = async (shouldNavigate: boolean = true) => {
+    console.log('Saving profile, shouldNavigate:', shouldNavigate);
     
     setLoading(true);
     
@@ -107,23 +158,37 @@ export default function ProfileSetupScreen() {
       const savedProfile = await authenticatedGet<any>('/api/profile');
       
       // Update local state with canonical version from storage
-      setFullName(savedProfile.fullName || '');
-      setPronouns(savedProfile.pronouns || '');
-      setRole(savedProfile.role || 'medical_student');
-      setRoleYear(savedProfile.roleYear?.toString() || '');
-      setResidencyProgram(savedProfile.residencyProgram || '');
-      setAffiliation(savedProfile.affiliation || '');
-      setProfilePicture(savedProfile.profilePicture || '');
+      const savedValues = {
+        fullName: savedProfile.fullName || '',
+        pronouns: savedProfile.pronouns || '',
+        role: savedProfile.role || 'medical_student',
+        roleYear: savedProfile.roleYear?.toString() || '',
+        residencyProgram: savedProfile.residencyProgram || '',
+        affiliation: savedProfile.affiliation || '',
+        profilePicture: savedProfile.profilePicture || '',
+      };
+      
+      setFullName(savedValues.fullName);
+      setPronouns(savedValues.pronouns);
+      setRole(savedValues.role);
+      setRoleYear(savedValues.roleYear);
+      setResidencyProgram(savedValues.residencyProgram);
+      setAffiliation(savedValues.affiliation);
+      setProfilePicture(savedValues.profilePicture);
+      setOriginalValues(savedValues);
       
       // Show success feedback
       Alert.alert('Saved', 'Profile saved successfully!');
       
-      // Navigate after save completes
-      router.replace('/(tabs)/(home)/');
+      // Navigate after save completes (if requested)
+      if (shouldNavigate) {
+        router.replace('/(tabs)/(home)/');
+      }
     } catch (error: any) {
       console.error('Error saving profile:', error);
       // Show clear error feedback - do not silently drop fields
       Alert.alert('Error', error.message || 'Failed to save profile. Please try again.');
+      throw error; // Re-throw so useUnsavedChanges knows save failed
     } finally {
       setLoading(false);
     }
@@ -138,9 +203,28 @@ export default function ProfileSetupScreen() {
 
   const showYearField = role === 'medical_student' || role === 'resident';
   const showResidencyField = role === 'resident';
+  
+  const isSaving = loading || isNavigating;
 
   return (
     <SafeAreaView style={styles.safeArea} edges={['top']}>
+      <Stack.Screen
+        options={{
+          headerShown: true,
+          title: isEditing ? 'Edit Profile' : 'Complete Profile',
+          headerBackTitle: 'Back',
+          headerLeft: () => (
+            <TouchableOpacity onPress={handleBackPress} style={styles.backButton}>
+              <IconSymbol
+                ios_icon_name="chevron.left"
+                android_material_icon_name="arrow-back"
+                size={24}
+                color={colors.primary}
+              />
+            </TouchableOpacity>
+          ),
+        }}
+      />
       <ScrollView
         style={styles.scrollView}
         contentContainerStyle={styles.scrollContent}
@@ -286,11 +370,11 @@ export default function ProfileSetupScreen() {
 
         {/* Save Button */}
         <TouchableOpacity
-          style={[styles.saveButton, loading && styles.saveButtonDisabled]}
-          onPress={handleSave}
-          disabled={loading}
+          style={[styles.saveButton, isSaving && styles.saveButtonDisabled]}
+          onPress={() => handleSave(true)}
+          disabled={isSaving}
         >
-          {loading ? (
+          {isSaving ? (
             <ActivityIndicator color="#FFFFFF" />
           ) : (
             <Text style={styles.saveButtonText}>{isEditing ? 'Save Changes' : 'Complete Setup'}</Text>
@@ -426,5 +510,8 @@ const styles = StyleSheet.create({
   },
   bottomSpacer: {
     height: spacing.xxxxl,
+  },
+  backButton: {
+    padding: spacing.sm,
   },
 });
