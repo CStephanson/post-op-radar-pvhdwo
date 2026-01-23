@@ -11,7 +11,7 @@ import {
   Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useRouter, Redirect } from 'expo-router';
+import { useRouter, Redirect, useFocusEffect } from 'expo-router';
 import { colors, typography, spacing, borderRadius, shadows } from '@/styles/commonStyles';
 import { IconSymbol } from '@/components/IconSymbol';
 import { Patient, AlertStatus, SortOption } from '@/types/patient';
@@ -68,6 +68,7 @@ export default function HomeScreen() {
         })) || [],
       }));
       
+      console.log('[HomeScreen] Loaded patients:', patientsWithDates.length);
       setPatients(patientsWithDates);
     } catch (error: any) {
       console.error('Error loading patients:', error);
@@ -97,12 +98,16 @@ export default function HomeScreen() {
     }
   }, [router]);
 
-  useEffect(() => {
-    if (user) {
-      loadPatients();
-      loadLastOpenedPatient();
-    }
-  }, [user, loadPatients, loadLastOpenedPatient]);
+  // Refresh patient list when screen comes into focus (e.g., after adding a patient)
+  useFocusEffect(
+    useCallback(() => {
+      console.log('[HomeScreen] Screen focused - refreshing patient list');
+      if (user) {
+        loadPatients();
+        loadLastOpenedPatient();
+      }
+    }, [user, loadPatients, loadLastOpenedPatient])
+  );
 
   const sortPatients = (patientsToSort: Patient[], sortOption: SortOption): Patient[] => {
     const sorted = [...patientsToSort];

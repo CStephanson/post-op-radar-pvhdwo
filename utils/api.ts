@@ -2,13 +2,16 @@
 import Constants from "expo-constants";
 import { Platform } from "react-native";
 import * as SecureStore from "expo-secure-store";
-import { BEARER_TOKEN_KEY } from "@/lib/auth";
 
 /**
  * Backend URL is configured in app.json under expo.extra.backendUrl
  * It is set automatically when the backend is deployed
  */
 export const BACKEND_URL = Constants.expoConfig?.extra?.backendUrl || "";
+
+// Storage keys - MUST match AuthContext keys
+const BEARER_TOKEN_KEY = "opmgmt_bearer_token";
+const IS_GUEST_KEY = "opmgmt_is_guest";
 
 /**
  * Check if backend is properly configured
@@ -27,9 +30,13 @@ export const isBackendConfigured = (): boolean => {
 export const getBearerToken = async (): Promise<string | null> => {
   try {
     if (Platform.OS === "web") {
-      return localStorage.getItem(BEARER_TOKEN_KEY);
+      const token = localStorage.getItem(BEARER_TOKEN_KEY);
+      console.log('[API] Retrieved token from localStorage:', token ? 'present' : 'missing');
+      return token;
     } else {
-      return await SecureStore.getItemAsync(BEARER_TOKEN_KEY);
+      const token = await SecureStore.getItemAsync(BEARER_TOKEN_KEY);
+      console.log('[API] Retrieved token from SecureStore:', token ? 'present' : 'missing');
+      return token;
     }
   } catch (error) {
     console.error("[API] Error retrieving bearer token:", error);
@@ -42,12 +49,15 @@ export const getBearerToken = async (): Promise<string | null> => {
  */
 export const isGuestMode = async (): Promise<boolean> => {
   try {
-    const IS_GUEST_KEY = "postopradar_is_guest";
     if (Platform.OS === "web") {
-      return localStorage.getItem(IS_GUEST_KEY) === "true";
+      const isGuest = localStorage.getItem(IS_GUEST_KEY) === "true";
+      console.log('[API] Guest mode check (web):', isGuest);
+      return isGuest;
     } else {
       const value = await SecureStore.getItemAsync(IS_GUEST_KEY);
-      return value === "true";
+      const isGuest = value === "true";
+      console.log('[API] Guest mode check (native):', isGuest);
+      return isGuest;
     }
   } catch (error) {
     console.error("[API] Error checking guest mode:", error);
@@ -72,28 +82,52 @@ export const apiCall = async <T = any>(
   }
 
   const url = `${BACKEND_URL}${endpoint}`;
-  console.log("[API] Calling:", url, options?.method || "GET");
+  const method = options?.method || "GET";
+  console.log("[API] Calling:", method, url);
+
+  const headers = {
+    "Content-Type": "application/json",
+    ...options?.headers,
+  };
+
+  // Log if Authorization header is present (but not the token itself)
+  if (headers.Authorization) {
+    console.log("[API] Request includes Authorization header");
+  } else {
+    console.log("[API] Request does NOT include Authorization header");
+  }
 
   try {
     const response = await fetch(url, {
       ...options,
-      headers: {
-        "Content-Type": "application/json",
-        ...options?.headers,
-      },
+      headers,
     });
+
+    console.log("[API] Response status:", response.status);
 
     if (!response.ok) {
       const text = await response.text();
       console.error("[API] Error response:", response.status, text);
+      
+      // Provide user-friendly error messages
+      if (response.status === 401) {
+        throw new Error("Session expired. Please sign in again.");
+      } else if (response.status === 403) {
+        throw new Error("You don't have permission to perform this action.");
+      } else if (response.status === 404) {
+        throw new Error("Resource not found.");
+      } else if (response.status >= 500) {
+        throw new Error("Server error. Please try again later.");
+      }
+      
       throw new Error(`API error: ${response.status} - ${text}`);
     }
 
     const data = await response.json();
-    console.log("[API] Success:", data);
+    console.log("[API] Success - received data");
     return data;
-  } catch (error) {
-    console.error("[API] Request failed:", error);
+  } catch (error: any) {
+    console.error("[API] Request failed:", error.message);
     throw error;
   }
 };
@@ -169,18 +203,25 @@ export const authenticatedApiCall = async <T = any>(
   endpoint: string,
   options?: RequestInit
 ): Promise<T> => {
+  console.log('[API] Authenticated call to:', endpoint);
+  
   // Check if user is in guest mode
   const guestMode = await isGuestMode();
   if (guestMode) {
+    console.log('[API] User is in guest mode - cannot make authenticated requests');
     throw new Error("This feature requires a signed-in account. Guest mode does not support saving data to the server.");
   }
 
   const token = await getBearerToken();
 
   if (!token) {
-    throw new Error("Session expired. Please sign in again.");
+    console.log('[API] No bearer token found - user needs to sign in');
+    throw new Error("Authentication token missing. Please sign in again.");
   }
 
+  console.log('[API] Token retrieved successfully (length:', token.length, ')');
+  console.log('[API] Making authenticated request with Authorization header');
+  
   return apiCall<T>(endpoint, {
     ...options,
     headers: {

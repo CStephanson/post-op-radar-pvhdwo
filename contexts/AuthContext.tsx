@@ -101,7 +101,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         await SecureStore.setItemAsync(BEARER_TOKEN_KEY, token);
       }
       setBearerToken(token);
-      console.log('[Auth] Bearer token stored successfully');
+      console.log('[Auth] Bearer token stored successfully (length:', token.length, ')');
     } catch (error) {
       console.error("[Auth] Error storing bearer token:", error);
     }
@@ -156,7 +156,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         console.log('[Auth] Found stored token and user data, restoring session');
         try {
           const parsedUser = JSON.parse(userData);
-          console.log('[Auth] Authenticated user loaded:', parsedUser.email);
+          console.log('[Auth] Authenticated user loaded:', parsedUser.email, 'Token length:', storedToken.length);
           setUser(parsedUser);
           setBearerToken(storedToken);
           setIsGuest(false);
@@ -537,4 +537,21 @@ export function useAuth() {
     throw new Error("useAuth must be used within an AuthProvider");
   }
   return context;
+}
+
+/**
+ * Helper function to get the current bearer token from storage
+ * This is useful for debugging and for API calls outside of React components
+ */
+export async function getCurrentBearerToken(): Promise<string | null> {
+  try {
+    if (Platform.OS === "web") {
+      return localStorage.getItem(BEARER_TOKEN_KEY);
+    } else {
+      return await SecureStore.getItemAsync(BEARER_TOKEN_KEY);
+    }
+  } catch (error) {
+    console.error("[Auth] Error getting current bearer token:", error);
+    return null;
+  }
 }
