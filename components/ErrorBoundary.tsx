@@ -84,36 +84,34 @@ export class ErrorBoundary extends Component<Props, State> {
                           errorMessage.includes('sign in') ||
                           errorMessage.includes('Guest mode');
 
+      const titleText = isAuthError ? 'Session Issue' : 'Oops! Something went wrong';
+      const messageText = isAuthError 
+        ? errorMessage
+        : 'We're sorry for the inconvenience. The app encountered an error.';
+      const buttonText = isAuthError ? 'Continue' : 'Try Again';
+
+      const showErrorDetails = __DEV__ && this.state.error && !isAuthError;
+      const errorString = this.state.error ? this.state.error.toString() : '';
+      const componentStack = this.state.errorInfo ? this.state.errorInfo.componentStack : '';
+
       // Default fallback UI
       return (
         <View style={styles.container}>
-          <Text style={styles.title}>
-            {isAuthError ? 'Session Issue' : 'Oops! Something went wrong'}
-          </Text>
-          <Text style={styles.message}>
-            {isAuthError 
-              ? errorMessage
-              : 'We're sorry for the inconvenience. The app encountered an error.'}
-          </Text>
+          <Text style={styles.title}>{titleText}</Text>
+          <Text style={styles.message}>{messageText}</Text>
 
-          {__DEV__ && this.state.error && !isAuthError && (
+          {showErrorDetails && (
             <ScrollView style={styles.errorDetails}>
               <Text style={styles.errorTitle}>Error Details (Dev Only):</Text>
-              <Text style={styles.errorText}>
-                {this.state.error.toString()}
-              </Text>
+              <Text style={styles.errorText}>{errorString}</Text>
               {this.state.errorInfo && (
-                <Text style={styles.errorStack}>
-                  {this.state.errorInfo.componentStack}
-                </Text>
+                <Text style={styles.errorStack}>{componentStack}</Text>
               )}
             </ScrollView>
           )}
 
           <TouchableOpacity style={styles.button} onPress={this.handleReset}>
-            <Text style={styles.buttonText}>
-              {isAuthError ? 'Continue' : 'Try Again'}
-            </Text>
+            <Text style={styles.buttonText}>{buttonText}</Text>
           </TouchableOpacity>
         </View>
       );
