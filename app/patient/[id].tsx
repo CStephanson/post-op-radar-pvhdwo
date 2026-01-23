@@ -1,5 +1,6 @@
 
-import React, { useState, useEffect } from 'react';
+
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -10,12 +11,13 @@ import {
   TextInput,
   Modal,
   KeyboardAvoidingView,
+  Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams, Stack } from 'expo-router';
 import { colors, typography, spacing, borderRadius, shadows } from '@/styles/commonStyles';
 import { IconSymbol } from '@/components/IconSymbol';
-import { Patient, Alert, AlertStatus, TrendData, VitalSigns, LabValues } from '@/types/patient';
+import { Patient, Alert as PatientAlert, AlertStatus, TrendData, VitalSigns, LabValues } from '@/types/patient';
 import { calculateTrends, generateAlerts, calculateAlertStatus } from '@/utils/alertLogic';
 
 export default function PatientDetailScreen() {
@@ -23,7 +25,7 @@ export default function PatientDetailScreen() {
   const router = useRouter();
   const { id } = useLocalSearchParams();
   const [patient, setPatient] = useState<Patient | null>(null);
-  const [alerts, setAlerts] = useState<Alert[]>([]);
+  const [alerts, setAlerts] = useState<PatientAlert[]>([]);
   const [trends, setTrends] = useState<TrendData[]>([]);
   const [editModalVisible, setEditModalVisible] = useState(false);
   const [editType, setEditType] = useState<'vitals' | 'labs'>('vitals');
@@ -39,11 +41,7 @@ export default function PatientDetailScreen() {
   const [editCreatinine, setEditCreatinine] = useState('');
   const [editLactate, setEditLactate] = useState('');
 
-  useEffect(() => {
-    loadPatientData();
-  }, [id]);
-
-  const loadPatientData = async () => {
+  const loadPatientData = useCallback(async () => {
     console.log('Loading patient data for ID:', id);
     try {
       const { authenticatedGet } = await import('@/utils/api');
@@ -74,7 +72,11 @@ export default function PatientDetailScreen() {
     } catch (error: any) {
       console.error('Error loading patient data:', error);
     }
-  };
+  }, [id]);
+
+  useEffect(() => {
+    loadPatientData();
+  }, [loadPatientData]);
 
   const updatePatientAnalysis = (updatedPatient: Patient) => {
     const patientTrends = calculateTrends(updatedPatient);
