@@ -1,3 +1,4 @@
+
 {
   "expo": {
     "name": "Post-Op Radar",
@@ -36,7 +37,7 @@
       "expo-router",
       "expo-web-browser"
     ],
-    "scheme": "natively",
+    "scheme": "postopradar",
     "experiments": {
       "typedRoutes": true
     },
@@ -44,6 +45,5 @@
       "router": {},
       "backendUrl": "https://c7s5pe83nw24vej7xawmm7k86rssuydu.app.specular.dev"
     }
-  },
-  "scheme": "Post-Op Radar"
+  }
 }

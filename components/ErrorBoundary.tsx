@@ -1,133 +1,122 @@
 
 /**
  * Error Boundary Component
- *
- * Catches JavaScript errors anywhere in the child component tree,
- * logs those errors, and displays a fallback UI.
- * Handles authentication errors gracefully without crashing.
+ * Catches JavaScript errors and displays a fallback UI
+ * Prevents blank screens by always showing something to the user
  */
 
-import React, { Component, ReactNode } from "react";
-import { View, Text, TouchableOpacity, StyleSheet, ScrollView } from "react-native";
+import React from "react";
+import { View, Text, TouchableOpacity, StyleSheet, ScrollView, Platform } from "react-native";
+import { useRouter } from "expo-router";
 
-interface Props {
-  children: ReactNode;
-  fallback?: ReactNode;
+interface ErrorBoundaryProps {
+  children: React.ReactNode;
+  fallback?: React.ReactNode;
   onError?: (error: Error, errorInfo: React.ErrorInfo) => void;
 }
 
-interface State {
+interface ErrorBoundaryState {
   hasError: boolean;
   error: Error | null;
   errorInfo: React.ErrorInfo | null;
 }
 
-export class ErrorBoundary extends Component<Props, State> {
-  constructor(props: Props) {
-    super(props);
-    this.state = {
-      hasError: false,
-      error: null,
-      errorInfo: null,
-    };
-  }
-
-  static getDerivedStateFromError(error: Error): State {
-    return {
-      hasError: true,
-      error,
-      errorInfo: null,
-    };
-  }
-
-  componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
-    console.error("[ErrorBoundary] Error caught:", error);
-    console.error("[ErrorBoundary] Component stack:", errorInfo.componentStack);
-
-    const errorMessage = error.message || '';
-    if (errorMessage.includes('Authentication token not found') || 
-        errorMessage.includes('Session expired') ||
-        errorMessage.includes('sign in')) {
-      console.log('[ErrorBoundary] Authentication error detected - showing user-friendly message');
-    }
-
-    this.setState({
-      error,
-      errorInfo,
-    });
-
-    this.props.onError?.(error, errorInfo);
-  }
-
-  handleReset = () => {
-    this.setState({
-      hasError: false,
-      error: null,
-      errorInfo: null,
-    });
+export class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoundaryState> {
+  state: ErrorBoundaryState = {
+    hasError: false,
+    error: null,
+    errorInfo: null,
   };
 
-  render() {
-    // Safety check: If we somehow get into a bad state, show error UI
-    try {
-      if (this.state.hasError) {
-        if (this.props.fallback) {
-          return this.props.fallback;
-        }
+  static getDerivedStateFromError(error: Error): Partial<ErrorBoundaryState> {
+    console.error("[ErrorBoundary] Error caught:", error);
+    return { hasError: true, error };
+  }
 
-        const errorMessage = this.state.error?.message || 'Unknown error';
-        const isAuthError = errorMessage.includes('Authentication token not found') || 
-                            errorMessage.includes('Session expired') ||
-                            errorMessage.includes('sign in') ||
-                            errorMessage.includes('Guest mode');
-
-        const titleText = isAuthError ? 'Session Issue' : 'Something went wrong';
-        const messageText = isAuthError 
-          ? errorMessage
-          : 'We're sorry for the inconvenience. The app encountered an error.';
-        const buttonText = isAuthError ? 'Continue' : 'Try Again';
-
-        const showErrorDetails = __DEV__ && this.state.error && !isAuthError;
-        const errorString = this.state.error ? this.state.error.toString() : 'No error details';
-        const componentStack = this.state.errorInfo ? this.state.errorInfo.componentStack : '';
-        const hasComponentStack = this.state.errorInfo !== null;
-
-        return (
-          <View style={styles.container}>
-            <Text style={styles.title}>{titleText}</Text>
-            <Text style={styles.message}>{messageText}</Text>
-
-            {showErrorDetails ? (
-              <ScrollView style={styles.errorDetails}>
-                <Text style={styles.errorTitle}>Error Details (Dev Only):</Text>
-                <Text style={styles.errorText}>{errorString}</Text>
-                {hasComponentStack ? (
-                  <Text style={styles.errorStack}>{componentStack}</Text>
-                ) : null}
-              </ScrollView>
-            ) : null}
-
-            <TouchableOpacity style={styles.button} onPress={this.handleReset}>
-              <Text style={styles.buttonText}>{buttonText}</Text>
-            </TouchableOpacity>
-          </View>
-        );
-      }
-
-      return this.props.children;
-    } catch (renderError) {
-      // Last resort: If even rendering the error UI fails, show minimal fallback
-      console.error('[ErrorBoundary] Failed to render error UI:', renderError);
-      return (
-        <View style={styles.container}>
-          <Text style={styles.title}>Critical Error</Text>
-          <Text style={styles.message}>The app encountered a critical error and cannot continue.</Text>
-          <TouchableOpacity style={styles.button} onPress={this.handleReset}>
-            <Text style={styles.buttonText}>Reload App</Text>
-          </TouchableOpacity>
-        </View>
-      );
+  componentDidCatch(error: Error, errorInfo: React.ErrorInfo): void {
+    console.error("[ErrorBoundary] Caught error:", error);
+    console.error("[ErrorBoundary] Error info:", errorInfo.componentStack);
+    
+    this.setState({ error, errorInfo });
+    
+    if (this.props.onError) {
+      this.props.onError(error, errorInfo);
     }
+  }
+
+  resetError = (): void => {
+    console.log("[ErrorBoundary] Resetting error state");
+    this.setState({ hasError: false, error: null, errorInfo: null });
+  };
+
+  render(): React.ReactNode {
+    if (!this.state.hasError) {
+      return this.props.children;
+    }
+
+    if (this.props.fallback) {
+      return this.props.fallback;
+    }
+
+    const error = this.state.error;
+    const errorMessage = error?.message || 'Unknown error occurred';
+    const errorStack = error?.stack || '';
+    
+    // Check if this is an auth-related error
+    const isAuthError = errorMessage.toLowerCase().includes('auth') || 
+                        errorMessage.toLowerCase().includes('session') ||
+                        errorMessage.toLowerCase().includes('guest') ||
+                        errorMessage.toLowerCase().includes('token');
+
+    const titleText = isAuthError ? 'Session Issue' : 'Something went wrong';
+    const messageText = isAuthError 
+      ? 'There was an issue with your session. Please try signing in again.'
+      : 'The app encountered an unexpected error. Please try again.';
+    const buttonText = isAuthError ? 'Go to Sign In' : 'Try Again';
+
+    return (
+      <View style={styles.container}>
+        <View style={styles.content}>
+          <Text style={styles.emoji}>⚠️</Text>
+          <Text style={styles.title}>{titleText}</Text>
+          <Text style={styles.message}>{messageText}</Text>
+
+          {__DEV__ && error && (
+            <ScrollView style={styles.errorDetails}>
+              <Text style={styles.errorTitle}>Error Details (Dev Only):</Text>
+              <Text style={styles.errorText}>{errorMessage}</Text>
+              {errorStack && (
+                <Text style={styles.errorStack}>{errorStack}</Text>
+              )}
+              {this.state.errorInfo && (
+                <Text style={styles.errorStack}>
+                  {this.state.errorInfo.componentStack}
+                </Text>
+              )}
+            </ScrollView>
+          )}
+
+          <TouchableOpacity style={styles.button} onPress={this.resetError}>
+            <Text style={styles.buttonText}>{buttonText}</Text>
+          </TouchableOpacity>
+
+          {Platform.OS !== 'web' && (
+            <TouchableOpacity 
+              style={[styles.button, styles.secondaryButton]} 
+              onPress={() => {
+                // Force reload the app
+                if (typeof global !== 'undefined' && (global as any).HermesInternal) {
+                  console.log('[ErrorBoundary] Reloading app...');
+                  this.resetError();
+                }
+              }}
+            >
+              <Text style={[styles.buttonText, styles.secondaryButtonText]}>Reload App</Text>
+            </TouchableOpacity>
+          )}
+        </View>
+      </View>
+    );
   }
 }
 
@@ -139,11 +128,21 @@ const styles = StyleSheet.create({
     padding: 24,
     backgroundColor: "#fff",
   },
+  content: {
+    width: '100%',
+    maxWidth: 400,
+    alignItems: 'center',
+  },
+  emoji: {
+    fontSize: 64,
+    marginBottom: 16,
+  },
   title: {
     fontSize: 24,
     fontWeight: "bold",
     marginBottom: 16,
     color: "#000",
+    textAlign: 'center',
   },
   message: {
     fontSize: 16,
@@ -169,23 +168,34 @@ const styles = StyleSheet.create({
   errorText: {
     fontSize: 12,
     color: "#333",
-    fontFamily: "monospace",
+    fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace',
     marginBottom: 8,
   },
   errorStack: {
     fontSize: 10,
     color: "#666",
-    fontFamily: "monospace",
+    fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace',
   },
   button: {
     backgroundColor: "#007AFF",
     paddingHorizontal: 32,
     paddingVertical: 12,
     borderRadius: 8,
+    marginBottom: 12,
+    minWidth: 200,
+    alignItems: 'center',
   },
   buttonText: {
     color: "#fff",
     fontSize: 16,
     fontWeight: "600",
+  },
+  secondaryButton: {
+    backgroundColor: 'transparent',
+    borderWidth: 1,
+    borderColor: '#007AFF',
+  },
+  secondaryButtonText: {
+    color: '#007AFF',
   },
 });

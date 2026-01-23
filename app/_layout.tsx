@@ -6,7 +6,7 @@ import { Stack } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import { SystemBars } from "react-native-edge-to-edge";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
-import { useColorScheme, Alert, View, Text } from "react-native";
+import { useColorScheme, Alert, View, Text, ActivityIndicator } from "react-native";
 import { useNetworkState } from "expo-network";
 import {
   DarkTheme,
@@ -39,6 +39,7 @@ export const unstable_settings = {
 };
 
 export default function RootLayout() {
+  console.log('[App] ===== RootLayout rendering =====');
   const colorScheme = useColorScheme();
   const networkState = useNetworkState();
   const [loaded] = useFonts({
@@ -87,11 +88,16 @@ export default function RootLayout() {
 
   if (!loaded) {
     console.log('[App] Fonts not loaded yet, showing loading screen');
-    // Show a loading screen instead of null to prevent blank screen
+    // Show a visible loading screen instead of null to prevent blank screen
     return (
       <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#fff' }}>
-        <Text style={{ fontSize: 18, fontWeight: '600', marginBottom: 8 }}>Loading Post-Op Radar...</Text>
-        <Text style={{ fontSize: 14, color: '#666' }}>Initializing app</Text>
+        <ActivityIndicator size="large" color="#007AFF" />
+        <Text style={{ fontSize: 18, fontWeight: '600', marginTop: 16, color: '#000' }}>
+          Loading Post-Op Radar...
+        </Text>
+        <Text style={{ fontSize: 14, color: '#666', marginTop: 8 }}>
+          Initializing app
+        </Text>
       </View>
     );
   }

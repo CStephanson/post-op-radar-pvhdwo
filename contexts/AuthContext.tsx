@@ -35,14 +35,14 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  console.log('[Auth] AuthProvider initializing...');
+  console.log('[Auth] ===== AuthProvider initializing =====');
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
   const [isGuest, setIsGuest] = useState(false);
   const [bearerToken, setBearerToken] = useState<string | null>(null);
+  const [isNavigating, setIsNavigating] = useState(false);
   const router = useRouter();
   const segments = useSegments();
-  console.log('[Auth] AuthProvider state initialized');
 
   const getStorageItem = useCallback(async (key: string): Promise<string | null> => {
     try {
@@ -126,7 +126,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           console.log('[Auth] Guest user loaded:', parsedUser.email);
           setUser(parsedUser);
           setIsGuest(true);
-          setBearerToken(null); // Guests don't have tokens
+          setBearerToken(null);
           setLoading(false);
           console.log('[Auth] ===== Auth check complete (guest) =====');
           return;
@@ -201,8 +201,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [checkAuth]);
 
   useEffect(() => {
-    if (loading) {
-      console.log('[Auth] Still loading, skipping navigation check');
+    if (loading || isNavigating) {
+      console.log('[Auth] Still loading or navigating, skipping navigation check');
       return;
     }
 
@@ -210,33 +210,37 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     console.log('[Auth] Navigation check - user:', user?.email, 'isGuest:', isGuest, 'hasToken:', !!bearerToken, 'inAuthGroup:', inAuthGroup, 'segments:', segments);
 
-    // CRITICAL: User is considered authenticated ONLY if:
-    // 1. They have a user object AND
-    // 2. Either they have a valid bearerToken (logged in) OR they are in guest mode
+    // User is authenticated if they have a user object AND (token OR guest mode)
     const isAuthenticated = !!user && (!!bearerToken || isGuest);
 
-    console.log('[Auth] isAuthenticated:', isAuthenticated, 'user:', !!user, 'bearerToken:', !!bearerToken, 'isGuest:', isGuest);
+    console.log('[Auth] isAuthenticated:', isAuthenticated);
 
     // Prevent redirect loops - only redirect if we're not already on the target route
     if (!isAuthenticated && !inAuthGroup) {
       console.log('[Auth] No valid session, redirecting to /auth');
+      setIsNavigating(true);
       try {
         router.replace("/auth");
       } catch (error) {
         console.error('[Auth] Failed to redirect to /auth:', error);
+      } finally {
+        setTimeout(() => setIsNavigating(false), 500);
       }
     } else if (isAuthenticated && inAuthGroup) {
       console.log('[Auth] User authenticated, redirecting to dashboard');
+      setIsNavigating(true);
       try {
         router.replace("/(tabs)/(home)");
       } catch (error) {
         console.error('[Auth] Failed to redirect to dashboard:', error);
+      } finally {
+        setTimeout(() => setIsNavigating(false), 500);
       }
     }
-  }, [user, loading, segments, bearerToken, isGuest, router]);
+  }, [user, loading, segments, bearerToken, isGuest, router, isNavigating]);
 
   const signInWithEmail = async (email: string, password: string) => {
-    console.log('[Auth] Sign in button clicked for email:', email);
+    console.log('[Auth] Sign in with email:', email);
     
     try {
       const result = await authClient.signIn.email({
@@ -275,12 +279,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
     } catch (error: any) {
       console.error('[Auth] Sign in exception:', error);
-      throw error; // Re-throw so UI can show error
+      throw error;
     }
   };
 
   const signUpWithEmail = async (email: string, password: string, name?: string) => {
-    console.log('[Auth] Sign up button clicked for email:', email);
+    console.log('[Auth] Sign up with email:', email);
     
     try {
       const result = await authClient.signUp.email({
@@ -320,7 +324,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
     } catch (error: any) {
       console.error('[Auth] Sign up exception:', error);
-      throw error; // Re-throw so UI can show error
+      throw error;
     }
   };
 
@@ -398,13 +402,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     
     setUser(guestUser);
     setIsGuest(true);
-    setBearerToken(null); // Guests don't have tokens
+    setBearerToken(null);
     
     // Persist guest session (no token)
     await setStorageItem(SESSION_FLAG_KEY, "true");
     await setStorageItem(USER_DATA_KEY, JSON.stringify(guestUser));
     await setStorageItem(IS_GUEST_KEY, "true");
-    await clearBearerToken(); // Ensure no token exists
+    await clearBearerToken();
     
     console.log('[Auth] Guest authentication successful, navigating to dashboard');
     router.replace("/(tabs)/(home)");
@@ -433,8 +437,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     router.replace("/auth");
   };
 
-  // CRITICAL: Compute isAuthenticated - single source of truth
-  // User is authenticated ONLY if they have a user AND (token OR guest mode)
+  // Compute isAuthenticated - single source of truth
   const isAuthenticated = !!user && (!!bearerToken || isGuest);
 
   return (
