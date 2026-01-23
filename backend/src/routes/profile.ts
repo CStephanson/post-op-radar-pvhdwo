@@ -26,6 +26,8 @@ export function registerProfileRoutes(app: App) {
               residencyProgram: { type: 'string' },
               affiliation: { type: 'string' },
               profilePicture: { type: 'string' },
+              lastOpenedPatientId: { type: 'string' },
+              lastOpenedAt: { type: 'string' },
               createdAt: { type: 'string' },
               updatedAt: { type: 'string' },
             },
@@ -48,7 +50,10 @@ export function registerProfileRoutes(app: App) {
         return null;
       }
 
-      app.logger.info({ userId: session.user.id, profileId: profile.id }, 'Profile retrieved');
+      app.logger.info(
+        { userId: session.user.id, profileId: profile.id, lastOpenedPatientId: profile.lastOpenedPatientId },
+        'Profile retrieved'
+      );
       return profile;
     }
   );
@@ -166,13 +171,15 @@ export function registerProfileRoutes(app: App) {
       residencyProgram?: string;
       affiliation?: string;
       profilePicture?: string;
+      lastOpenedPatientId?: string;
+      lastOpenedAt?: string;
     };
-    Reply: typeof schema.userProfiles.$inferSelect | null;
+    Reply: typeof schema.userProfiles.$inferSelect;
   }>(
     '/api/profile',
     {
       schema: {
-        description: 'Update user profile',
+        description: 'Update user profile (including last opened patient tracking)',
         tags: ['profile'],
         body: {
           type: 'object',
@@ -184,6 +191,8 @@ export function registerProfileRoutes(app: App) {
             residencyProgram: { type: 'string' },
             affiliation: { type: 'string' },
             profilePicture: { type: 'string' },
+            lastOpenedPatientId: { type: 'string' },
+            lastOpenedAt: { type: 'string' },
           },
         },
         response: {
@@ -199,6 +208,8 @@ export function registerProfileRoutes(app: App) {
               residencyProgram: { type: 'string' },
               affiliation: { type: 'string' },
               profilePicture: { type: 'string' },
+              lastOpenedPatientId: { type: 'string' },
+              lastOpenedAt: { type: 'string' },
               createdAt: { type: 'string' },
               updatedAt: { type: 'string' },
             },
@@ -218,6 +229,8 @@ export function registerProfileRoutes(app: App) {
       const residencyProgram = body.residencyProgram as string | undefined;
       const affiliation = body.affiliation as string | undefined;
       const profilePicture = body.profilePicture as string | undefined;
+      const lastOpenedPatientId = body.lastOpenedPatientId as string | undefined;
+      const lastOpenedAt = body.lastOpenedAt as string | undefined;
 
       app.logger.info(
         { userId: session.user.id, fieldsProvided: Object.keys(body).length },
@@ -233,6 +246,8 @@ export function registerProfileRoutes(app: App) {
           ...(residencyProgram !== undefined && { residencyProgram }),
           ...(affiliation !== undefined && { affiliation }),
           ...(profilePicture !== undefined && { profilePicture }),
+          ...(lastOpenedPatientId !== undefined && { lastOpenedPatientId }),
+          ...(lastOpenedAt !== undefined && { lastOpenedAt: new Date(lastOpenedAt) }),
         };
 
         const [profile] = await app.db

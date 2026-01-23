@@ -11,12 +11,13 @@ export function registerPatientRoutes(app: App) {
     Reply: Array<typeof schema.patients.$inferSelect & {
       vitalSigns: typeof schema.vitalSigns.$inferSelect[];
       labValues: typeof schema.labValues.$inferSelect[];
+      isLastOpened: boolean;
     }>;
   }>(
     '/api/patients',
     {
       schema: {
-        description: 'Get all patients for current user',
+        description: 'Get all patients for current user with last-opened tracking',
         tags: ['patients'],
         response: {
           200: {
@@ -30,7 +31,10 @@ export function registerPatientRoutes(app: App) {
                 idStatement: { type: 'string' },
                 procedureType: { type: 'string' },
                 postOpDay: { type: 'integer' },
-                alertStatus: { type: 'string', enum: ['green', 'yellow', 'red'] },
+                alertStatus: { type: 'string', enum: ['green', 'orange', 'red'] },
+                statusMode: { type: 'string', enum: ['auto', 'manual'] },
+                manualStatus: { type: 'string', enum: ['green', 'orange', 'red'] },
+                computedStatus: { type: 'string', enum: ['green', 'orange', 'red'] },
                 preOpDiagnosis: { type: 'string' },
                 postOpDiagnosis: { type: 'string' },
                 specimensTaken: { type: 'string' },
@@ -47,6 +51,7 @@ export function registerPatientRoutes(app: App) {
                 updatedAt: { type: 'string' },
                 vitalSigns: { type: 'array' },
                 labValues: { type: 'array' },
+                isLastOpened: { type: 'boolean' },
               },
             },
           },
@@ -59,6 +64,11 @@ export function registerPatientRoutes(app: App) {
 
       app.logger.info({ userId: session.user.id }, 'Fetching patients list');
 
+      // Get user's profile to check lastOpenedPatientId
+      const userProfile = await app.db.query.userProfiles.findFirst({
+        where: eq(schema.userProfiles.userId, session.user.id),
+      });
+
       const patients = await app.db.query.patients.findMany({
         where: eq(schema.patients.userId, session.user.id),
         with: {
@@ -67,12 +77,18 @@ export function registerPatientRoutes(app: App) {
         },
       });
 
+      // Add isLastOpened flag to each patient
+      const patientsWithLastOpened = patients.map((patient) => ({
+        ...patient,
+        isLastOpened: userProfile?.lastOpenedPatientId === patient.id,
+      }));
+
       app.logger.info(
-        { userId: session.user.id, count: patients.length },
-        'Patients retrieved'
+        { userId: session.user.id, count: patientsWithLastOpened.length },
+        'Patients retrieved with last-opened tracking'
       );
 
-      return patients;
+      return patientsWithLastOpened;
     }
   );
 
@@ -82,12 +98,13 @@ export function registerPatientRoutes(app: App) {
     Reply: typeof schema.patients.$inferSelect & {
       vitalSigns: typeof schema.vitalSigns.$inferSelect[];
       labValues: typeof schema.labValues.$inferSelect[];
+      isLastOpened: boolean;
     } | null;
   }>(
     '/api/patients/:id',
     {
       schema: {
-        description: 'Get a single patient',
+        description: 'Get a single patient with last-opened tracking',
         tags: ['patients'],
         params: {
           type: 'object',
@@ -105,8 +122,12 @@ export function registerPatientRoutes(app: App) {
               procedureType: { type: 'string' },
               postOpDay: { type: 'integer' },
               alertStatus: { type: 'string' },
+              statusMode: { type: 'string' },
+              manualStatus: { type: 'string' },
+              computedStatus: { type: 'string' },
               vitalSigns: { type: 'array' },
               labValues: { type: 'array' },
+              isLastOpened: { type: 'boolean' },
             },
           },
         },
@@ -119,6 +140,11 @@ export function registerPatientRoutes(app: App) {
       const { id } = request.params as { id: string };
 
       app.logger.info({ userId: session.user.id, patientId: id }, 'Fetching patient');
+
+      // Get user's profile to check lastOpenedPatientId
+      const userProfile = await app.db.query.userProfiles.findFirst({
+        where: eq(schema.userProfiles.userId, session.user.id),
+      });
 
       const patient = await app.db.query.patients.findFirst({
         where: and(
@@ -139,12 +165,17 @@ export function registerPatientRoutes(app: App) {
         return reply.status(404).send({ error: 'Patient not found' });
       }
 
+      const patientWithLastOpened = {
+        ...patient,
+        isLastOpened: userProfile?.lastOpenedPatientId === patient.id,
+      };
+
       app.logger.info(
-        { userId: session.user.id, patientId: id },
+        { userId: session.user.id, patientId: id, isLastOpened: patientWithLastOpened.isLastOpened },
         'Patient retrieved'
       );
 
-      return patient;
+      return patientWithLastOpened;
     }
   );
 

@@ -25,6 +25,10 @@ export const userProfiles = pgTable(
     residencyProgram: text('residency_program'), // Only for residents
     affiliation: text('affiliation'), // Hospital or university
     profilePicture: text('profile_picture'), // Storage key
+    lastOpenedPatientId: uuid('last_opened_patient_id').references(() => patients.id, {
+      onDelete: 'set null',
+    }),
+    lastOpenedAt: timestamp('last_opened_at'),
     createdAt: timestamp('created_at').defaultNow().notNull(),
     updatedAt: timestamp('updated_at')
       .defaultNow()
@@ -33,6 +37,7 @@ export const userProfiles = pgTable(
   },
   (table) => [
     index('user_profiles_user_id_idx').on(table.userId),
+    index('user_profiles_last_opened_patient_id_idx').on(table.lastOpenedPatientId),
   ]
 );
 
