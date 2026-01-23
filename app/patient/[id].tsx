@@ -63,6 +63,10 @@ export default function PatientDetailScreen() {
           ...l,
           timestamp: new Date(l.timestamp),
         })) || [],
+        // Load manual status override fields
+        statusMode: patientData.statusMode || 'auto',
+        manualStatus: patientData.manualStatus,
+        computedStatus: patientData.computedStatus,
       };
       
       setPatient(patientWithDates);
@@ -77,8 +81,19 @@ export default function PatientDetailScreen() {
     setTrends(patientTrends);
     const patientAlerts = generateAlerts(updatedPatient);
     setAlerts(patientAlerts);
-    const newAlertStatus = calculateAlertStatus(updatedPatient);
-    updatedPatient.alertStatus = newAlertStatus;
+    
+    // Calculate the auto status
+    const computedStatus = calculateAlertStatus(updatedPatient);
+    updatedPatient.computedStatus = computedStatus;
+    
+    // Respect manual status override - do NOT overwrite user-selected status
+    if (updatedPatient.statusMode === 'manual' && updatedPatient.manualStatus) {
+      console.log('Manual status override active - using manual status:', updatedPatient.manualStatus);
+      updatedPatient.alertStatus = updatedPatient.manualStatus;
+    } else {
+      console.log('Auto status mode - using computed status:', computedStatus);
+      updatedPatient.alertStatus = computedStatus;
+    }
   };
 
   const openEditModal = (type: 'vitals' | 'labs') => {
@@ -116,7 +131,7 @@ export default function PatientDetailScreen() {
     if (!patient) return;
     
     try {
-      const { authenticatedPost } = await import('@/utils/api');
+      const { authenticatedPost, authenticatedPut } = await import('@/utils/api');
       
       if (editType === 'vitals') {
         const vitalsData = {
@@ -143,6 +158,15 @@ export default function PatientDetailScreen() {
         const updatedPatient = { ...patient, vitals: [...patient.vitals, newVitals] };
         setPatient(updatedPatient);
         updatePatientAnalysis(updatedPatient);
+        
+        // Update patient record with new computed status (only if in auto mode)
+        if (updatedPatient.statusMode !== 'manual') {
+          console.log('Auto mode - updating patient with computed status');
+          await authenticatedPut(`/api/patients/${patient.id}`, {
+            computedStatus: updatedPatient.computedStatus,
+            alertStatus: updatedPatient.alertStatus,
+          });
+        }
       } else {
         const labsData = {
           wbc: editWBC || undefined,
@@ -166,6 +190,15 @@ export default function PatientDetailScreen() {
         const updatedPatient = { ...patient, labs: [...patient.labs, newLabs] };
         setPatient(updatedPatient);
         updatePatientAnalysis(updatedPatient);
+        
+        // Update patient record with new computed status (only if in auto mode)
+        if (updatedPatient.statusMode !== 'manual') {
+          console.log('Auto mode - updating patient with computed status');
+          await authenticatedPut(`/api/patients/${patient.id}`, {
+            computedStatus: updatedPatient.computedStatus,
+            alertStatus: updatedPatient.alertStatus,
+          });
+        }
       }
       
       setEditModalVisible(false);

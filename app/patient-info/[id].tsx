@@ -41,6 +41,10 @@ export default function PatientInfoScreen() {
   const [anesthesiaType, setAnesthesiaType] = useState('');
   const [clinicalStatus, setClinicalStatus] = useState('');
   const [hospitalLocation, setHospitalLocation] = useState('');
+  
+  // Manual status override fields
+  const [statusMode, setStatusMode] = useState<'auto' | 'manual'>('auto');
+  const [manualStatus, setManualStatus] = useState<'green' | 'orange' | 'red'>('green');
 
   useEffect(() => {
     loadPatientInfo();
@@ -67,6 +71,10 @@ export default function PatientInfoScreen() {
       setAnesthesiaType(patient.anesthesiaType || '');
       setClinicalStatus(patient.clinicalStatus || '');
       setHospitalLocation(patient.hospitalLocation || '');
+      
+      // Load manual status override fields
+      setStatusMode(patient.statusMode || 'auto');
+      setManualStatus(patient.manualStatus || 'green');
     } catch (error: any) {
       console.error('Error loading patient info:', error);
       Alert.alert('Error', error.message || 'Failed to load patient information');
@@ -78,40 +86,67 @@ export default function PatientInfoScreen() {
   const handleSave = async () => {
     console.log('User tapped save button');
     
-    if (!name.trim()) {
-      Alert.alert('Required Field', 'Please enter patient name');
-      return;
-    }
-    
     setSaving(true);
     try {
-      const { authenticatedPut } = await import('@/utils/api');
+      const { authenticatedPut, authenticatedGet } = await import('@/utils/api');
       
+      // ALWAYS include ALL fields in the save payload (no partial saves)
       const patientData = {
-        name: name.trim(),
-        idStatement: idStatement.trim() || undefined,
-        procedureType: procedureType.trim() || undefined,
-        preOpDiagnosis: preOpDiagnosis.trim() || undefined,
-        postOpDiagnosis: postOpDiagnosis.trim() || undefined,
-        specimensTaken: specimensTaken.trim() || undefined,
-        estimatedBloodLoss: estimatedBloodLoss.trim() || undefined,
-        complications: complications.trim() || undefined,
+        name: name.trim() || 'Unnamed Patient',
+        idStatement: idStatement.trim() || '',
+        procedureType: procedureType.trim() || '',
+        preOpDiagnosis: preOpDiagnosis.trim() || '',
+        postOpDiagnosis: postOpDiagnosis.trim() || '',
+        specimensTaken: specimensTaken.trim() || '',
+        estimatedBloodLoss: estimatedBloodLoss.trim() || '',
+        complications: complications.trim() || '',
         operationDateTime: operationDateTime.toISOString(),
-        surgeon: surgeon.trim() || undefined,
-        anesthesiologist: anesthesiologist.trim() || undefined,
-        anesthesiaType: anesthesiaType.trim() || undefined,
-        clinicalStatus: clinicalStatus.trim() || undefined,
-        hospitalLocation: hospitalLocation.trim() || undefined,
+        surgeon: surgeon.trim() || '',
+        anesthesiologist: anesthesiologist.trim() || '',
+        anesthesiaType: anesthesiaType.trim() || '',
+        clinicalStatus: clinicalStatus.trim() || '',
+        hospitalLocation: hospitalLocation.trim() || '',
+        // Manual status override fields
+        statusMode,
+        manualStatus,
       };
       
-      console.log('Saving patient info:', patientData);
+      console.log('Saving ALL patient fields:', patientData);
+      
+      // Single atomic update - either all fields save or it fails
       await authenticatedPut(`/api/patients/${id}`, patientData);
       
-      Alert.alert('Success', 'Patient information updated');
+      // Re-fetch the saved record to ensure UI matches persisted data
+      console.log('Re-fetching saved patient to sync state');
+      const savedPatient = await authenticatedGet<any>(`/api/patients/${id}`);
+      
+      // Update local state with canonical version from storage
+      setName(savedPatient.name || '');
+      setIdStatement(savedPatient.idStatement || '');
+      setProcedureType(savedPatient.procedureType || '');
+      setPreOpDiagnosis(savedPatient.preOpDiagnosis || '');
+      setPostOpDiagnosis(savedPatient.postOpDiagnosis || '');
+      setSpecimensTaken(savedPatient.specimensTaken || '');
+      setEstimatedBloodLoss(savedPatient.estimatedBloodLoss || '');
+      setComplications(savedPatient.complications || '');
+      setOperationDateTime(savedPatient.operationDateTime ? new Date(savedPatient.operationDateTime) : new Date());
+      setSurgeon(savedPatient.surgeon || '');
+      setAnesthesiologist(savedPatient.anesthesiologist || '');
+      setAnesthesiaType(savedPatient.anesthesiaType || '');
+      setClinicalStatus(savedPatient.clinicalStatus || '');
+      setHospitalLocation(savedPatient.hospitalLocation || '');
+      setStatusMode(savedPatient.statusMode || 'auto');
+      setManualStatus(savedPatient.manualStatus || 'green');
+      
+      // Show success feedback
+      Alert.alert('Saved', 'Patient information saved successfully!');
+      
+      // Navigate back after save completes
       router.back();
     } catch (error: any) {
       console.error('Error saving patient info:', error);
-      Alert.alert('Error', error.message || 'Failed to save patient information');
+      // Show clear error feedback - do not silently drop fields
+      Alert.alert('Error', error.message || 'Failed to save patient information. Please try again.');
     } finally {
       setSaving(false);
     }
@@ -394,6 +429,139 @@ export default function PatientInfoScreen() {
           </View>
         </View>
 
+        {/* Manual Status Override */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Alert Status Override</Text>
+          
+          <View style={styles.inputGroup}>
+            <Text style={styles.label}>Status Mode</Text>
+            <View style={styles.statusModeToggle}>
+              <TouchableOpacity
+                style={[styles.statusModeButton, statusMode === 'auto' && styles.statusModeButtonActive]}
+                onPress={() => {
+                  console.log('User selected auto status mode');
+                  setStatusMode('auto');
+                }}
+              >
+                <IconSymbol
+                  ios_icon_name="wand.and.stars"
+                  android_material_icon_name="auto-fix-high"
+                  size={18}
+                  color={statusMode === 'auto' ? '#FFFFFF' : colors.textSecondary}
+                />
+                <Text style={[styles.statusModeButtonText, statusMode === 'auto' && styles.statusModeButtonTextActive]}>
+                  Auto (Rule-Based)
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.statusModeButton, statusMode === 'manual' && styles.statusModeButtonActive]}
+                onPress={() => {
+                  console.log('User selected manual status mode');
+                  setStatusMode('manual');
+                }}
+              >
+                <IconSymbol
+                  ios_icon_name="hand.raised.fill"
+                  android_material_icon_name="pan-tool"
+                  size={18}
+                  color={statusMode === 'manual' ? '#FFFFFF' : colors.textSecondary}
+                />
+                <Text style={[styles.statusModeButtonText, statusMode === 'manual' && styles.statusModeButtonTextActive]}>
+                  Manual Override
+                </Text>
+              </TouchableOpacity>
+            </View>
+            
+            {statusMode === 'auto' && (
+              <Text style={styles.helperText}>
+                Status is automatically calculated based on vital signs and lab trends
+              </Text>
+            )}
+            {statusMode === 'manual' && (
+              <Text style={styles.helperText}>
+                You are manually controlling the alert status. Auto-calculation is disabled.
+              </Text>
+            )}
+          </View>
+
+          {statusMode === 'manual' && (
+            <View style={styles.inputGroup}>
+              <Text style={styles.label}>Manual Status</Text>
+              <View style={styles.statusGrid}>
+                <TouchableOpacity
+                  style={[
+                    styles.statusCard,
+                    { borderColor: colors.alertGreenBorder },
+                    manualStatus === 'green' && { backgroundColor: colors.alertGreenBg, borderWidth: 3 }
+                  ]}
+                  onPress={() => {
+                    console.log('User selected green status');
+                    setManualStatus('green');
+                  }}
+                >
+                  <IconSymbol
+                    ios_icon_name="checkmark.circle.fill"
+                    android_material_icon_name="check-circle"
+                    size={32}
+                    color={colors.alertGreen}
+                  />
+                  <Text style={[styles.statusCardTitle, { color: colors.alertGreen }]}>
+                    Stable
+                  </Text>
+                  <Text style={styles.statusCardSubtitle}>No concerns</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={[
+                    styles.statusCard,
+                    { borderColor: colors.alertYellowBorder },
+                    manualStatus === 'orange' && { backgroundColor: colors.alertYellowBg, borderWidth: 3 }
+                  ]}
+                  onPress={() => {
+                    console.log('User selected orange status');
+                    setManualStatus('orange');
+                  }}
+                >
+                  <IconSymbol
+                    ios_icon_name="exclamationmark.triangle.fill"
+                    android_material_icon_name="warning"
+                    size={32}
+                    color={colors.alertYellow}
+                  />
+                  <Text style={[styles.statusCardTitle, { color: colors.alertYellow }]}>
+                    Monitor
+                  </Text>
+                  <Text style={styles.statusCardSubtitle}>Watch closely</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={[
+                    styles.statusCard,
+                    { borderColor: colors.alertRedBorder },
+                    manualStatus === 'red' && { backgroundColor: colors.alertRedBg, borderWidth: 3 }
+                  ]}
+                  onPress={() => {
+                    console.log('User selected red status');
+                    setManualStatus('red');
+                  }}
+                >
+                  <IconSymbol
+                    ios_icon_name="exclamationmark.octagon.fill"
+                    android_material_icon_name="error"
+                    size={32}
+                    color={colors.alertRed}
+                  />
+                  <Text style={[styles.statusCardTitle, { color: colors.alertRed }]}>
+                    Reassess
+                  </Text>
+                  <Text style={styles.statusCardSubtitle}>Urgent review</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          )}
+        </View>
+
         {/* Action Buttons */}
         <View style={styles.actions}>
           <TouchableOpacity
@@ -546,5 +714,66 @@ const styles = StyleSheet.create({
   },
   bottomSpacer: {
     height: spacing.xxxxl,
+  },
+  statusModeToggle: {
+    flexDirection: 'row',
+    gap: spacing.md,
+  },
+  statusModeButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.sm,
+    backgroundColor: colors.backgroundAlt,
+    borderWidth: 2,
+    borderColor: colors.border,
+    borderRadius: borderRadius.md,
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.sm,
+  },
+  statusModeButtonActive: {
+    backgroundColor: colors.primary,
+    borderColor: colors.primary,
+  },
+  statusModeButtonText: {
+    fontSize: typography.bodySmall,
+    fontWeight: typography.semibold,
+    color: colors.textSecondary,
+    textAlign: 'center',
+  },
+  statusModeButtonTextActive: {
+    color: '#FFFFFF',
+  },
+  helperText: {
+    fontSize: typography.caption,
+    fontWeight: typography.regular,
+    color: colors.textLight,
+    marginTop: spacing.sm,
+    lineHeight: 18,
+  },
+  statusGrid: {
+    flexDirection: 'row',
+    gap: spacing.md,
+  },
+  statusCard: {
+    flex: 1,
+    backgroundColor: colors.backgroundAlt,
+    borderWidth: 2,
+    borderRadius: borderRadius.lg,
+    padding: spacing.lg,
+    alignItems: 'center',
+    gap: spacing.sm,
+  },
+  statusCardTitle: {
+    fontSize: typography.body,
+    fontWeight: typography.bold,
+    textAlign: 'center',
+  },
+  statusCardSubtitle: {
+    fontSize: typography.tiny,
+    fontWeight: typography.regular,
+    color: colors.textLight,
+    textAlign: 'center',
   },
 });

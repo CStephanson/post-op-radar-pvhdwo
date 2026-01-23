@@ -315,6 +315,12 @@ export default function HomeScreen() {
                 const alertLabel = getAlertLabel(patient.alertStatus);
                 const alertIcon = getAlertIcon(patient.alertStatus);
                 const podText = `POD ${patient.postOpDay}`;
+                
+                // Display patient name or "Unnamed Patient" if blank
+                const displayName = patient.name && patient.name.trim() ? patient.name : 'Unnamed Patient';
+                
+                // Check if status is manually overridden
+                const isManualStatus = patient.statusMode === 'manual';
 
                 return (
                   <TouchableOpacity
@@ -337,12 +343,17 @@ export default function HomeScreen() {
                       <Text style={[styles.alertLabel, { color: alertColor }]}>
                         {alertLabel}
                       </Text>
+                      {isManualStatus && (
+                        <View style={styles.manualBadge}>
+                          <Text style={styles.manualBadgeText}>MANUAL</Text>
+                        </View>
+                      )}
                     </View>
 
                     <View style={styles.cardContent}>
                       {/* Patient Info - Clear Hierarchy */}
                       <View style={styles.patientInfo}>
-                        <Text style={styles.patientName}>{patient.name}</Text>
+                        <Text style={styles.patientName}>{displayName}</Text>
                         
                         <View style={styles.metaRow}>
                           <View style={styles.podBadge}>
@@ -595,6 +606,19 @@ const styles = StyleSheet.create({
     fontWeight: typography.bold,
     letterSpacing: 0.3,
     textTransform: 'uppercase',
+  },
+  manualBadge: {
+    marginLeft: spacing.sm,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 2,
+    backgroundColor: colors.textLight,
+    borderRadius: borderRadius.xs,
+  },
+  manualBadgeText: {
+    fontSize: typography.tiny,
+    fontWeight: typography.bold,
+    color: '#FFFFFF',
+    letterSpacing: 0.5,
   },
   cardContent: {
     flexDirection: 'row',

@@ -47,6 +47,11 @@ export interface Patient {
   postOpDay: number; // POD
   alertStatus: AlertStatus;
   
+  // Manual status override fields
+  statusMode?: 'auto' | 'manual'; // Default: 'auto'
+  manualStatus?: AlertStatus; // User-selected status when statusMode is 'manual'
+  computedStatus?: AlertStatus; // Auto-calculated status for reference
+  
   // Operation details
   preOpDiagnosis?: string;
   postOpDiagnosis?: string;

@@ -77,39 +77,52 @@ export default function ProfileSetupScreen() {
   const handleSave = async () => {
     console.log('User tapped save profile button');
     
-    if (!fullName.trim()) {
-      Alert.alert('Required Field', 'Please enter your full name');
-      return;
-    }
-
     setLoading(true);
     
     try {
-      const { authenticatedPost, authenticatedPut } = await import('@/utils/api');
+      const { authenticatedPost, authenticatedPut, authenticatedGet } = await import('@/utils/api');
       
+      // ALWAYS include ALL fields in the save payload (no partial saves)
       const profileData = {
-        fullName: fullName.trim(),
-        pronouns: pronouns.trim() || undefined,
+        fullName: fullName.trim() || '',
+        pronouns: pronouns.trim() || '',
         role,
-        roleYear: roleYear ? parseInt(roleYear) : undefined,
-        residencyProgram: residencyProgram.trim() || undefined,
-        affiliation: affiliation.trim() || undefined,
-        profilePicture: profilePicture || undefined,
+        roleYear: roleYear ? parseInt(roleYear) : null,
+        residencyProgram: residencyProgram.trim() || '',
+        affiliation: affiliation.trim() || '',
+        profilePicture: profilePicture || '',
       };
       
-      console.log('Saving profile data:', profileData);
+      console.log('Saving ALL profile fields:', profileData);
       
+      // Single atomic update - either all fields save or it fails
       if (isEditing) {
         await authenticatedPut('/api/profile', profileData);
-        Alert.alert('Success', 'Profile updated successfully!');
       } else {
         await authenticatedPost('/api/profile', profileData);
-        Alert.alert('Success', 'Profile created successfully!');
       }
       
+      // Re-fetch the saved record to ensure UI matches persisted data
+      console.log('Re-fetching saved profile to sync state');
+      const savedProfile = await authenticatedGet<any>('/api/profile');
+      
+      // Update local state with canonical version from storage
+      setFullName(savedProfile.fullName || '');
+      setPronouns(savedProfile.pronouns || '');
+      setRole(savedProfile.role || 'medical_student');
+      setRoleYear(savedProfile.roleYear?.toString() || '');
+      setResidencyProgram(savedProfile.residencyProgram || '');
+      setAffiliation(savedProfile.affiliation || '');
+      setProfilePicture(savedProfile.profilePicture || '');
+      
+      // Show success feedback
+      Alert.alert('Saved', 'Profile saved successfully!');
+      
+      // Navigate after save completes
       router.replace('/(tabs)/(home)/');
     } catch (error: any) {
       console.error('Error saving profile:', error);
+      // Show clear error feedback - do not silently drop fields
       Alert.alert('Error', error.message || 'Failed to save profile. Please try again.');
     } finally {
       setLoading(false);
