@@ -11,14 +11,15 @@ import {
   Pressable,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useFocusEffect } from '@react-navigation/native';
+import { useFocusEffect, useRouter } from 'expo-router';
 import { colors, typography, spacing, borderRadius, shadows } from '@/styles/commonStyles';
 import { IconSymbol } from '@/components/IconSymbol';
 import { Patient, AlertStatus, SortOption } from '@/types/patient';
 import { getAllPatients } from '@/utils/localStorage';
 
-export default function HomeScreen({ navigation }: any) {
+export default function HomeScreen() {
   console.log('[HomeScreen] Component rendered');
+  const router = useRouter();
   const [patients, setPatients] = useState<Patient[]>([]);
   const [loading, setLoading] = useState(true);
   const [sortBy, setSortBy] = useState<SortOption>('status');
@@ -92,21 +93,24 @@ export default function HomeScreen({ navigation }: any) {
 
   const handlePatientPress = (patientId: string) => {
     console.log('[HomeScreen] User tapped patient card:', patientId);
-    navigation.navigate('PatientDetail', { id: patientId });
+    router.push(`/patient/${patientId}`);
   };
 
   const handleAddPatient = () => {
     console.log('[HomeScreen] ========== ADD PATIENT BUTTON PRESSED ==========');
     console.log('[HomeScreen] User tapped Add Patient button');
-    Alert.alert('Add Patient button pressed', 'Navigation will occur now', [
-      {
-        text: 'OK',
-        onPress: () => {
-          console.log('[HomeScreen] Navigating to AddPatient screen');
-          navigation.navigate('AddPatient');
-        }
-      }
-    ]);
+    console.log('[HomeScreen] Navigating to AddPatient screen using Expo Router');
+    router.push('/add-patient');
+  };
+
+  const handleTestTap = () => {
+    console.log('[HomeScreen] TEST TAP button pressed');
+    Alert.alert('Dashboard tap works', 'The TEST TAP button responded successfully!');
+  };
+
+  const handleTestFAB = () => {
+    console.log('[HomeScreen] TEST FAB button pressed');
+    Alert.alert('FAB tap works', 'The TEST FAB button responded successfully!');
   };
 
   const getAlertColor = (status: AlertStatus) => {
@@ -186,6 +190,17 @@ export default function HomeScreen({ navigation }: any) {
           contentContainerStyle={styles.scrollContent}
           showsVerticalScrollIndicator={false}
         >
+          {/* TEMPORARY TEST TAP BUTTON - Full width at top of content */}
+          <Pressable
+            onPress={handleTestTap}
+            style={({ pressed }) => [
+              styles.testTapButton,
+              pressed && styles.testTapButtonPressed
+            ]}
+          >
+            <Text style={styles.testTapButtonText}>TEST TAP - Press to verify touch works</Text>
+          </Pressable>
+
           <View style={styles.listHeader}>
             <View style={styles.listHeaderLeft}>
               <Text style={styles.listTitle}>Patients</Text>
@@ -356,6 +371,19 @@ export default function HomeScreen({ navigation }: any) {
           <View style={styles.bottomSpacer} />
         </ScrollView>
 
+        {/* TEMPORARY TEST FAB - Top-left floating button */}
+        <Pressable
+          onPress={handleTestFAB}
+          style={({ pressed }) => [
+            styles.testFABButton,
+            pressed && styles.testFABButtonPressed
+          ]}
+          hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+        >
+          <Text style={styles.testFABButtonText}>TEST FAB</Text>
+        </Pressable>
+
+        {/* Real Add Patient FAB - Bottom-right */}
         <Pressable
           onPress={handleAddPatient}
           style={({ pressed }) => [
@@ -436,6 +464,49 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     paddingTop: spacing.xxl + spacing.sm,
+  },
+  testTapButton: {
+    backgroundColor: '#FF6B35',
+    marginHorizontal: spacing.xl,
+    marginBottom: spacing.lg,
+    paddingVertical: spacing.xl,
+    borderRadius: borderRadius.lg,
+    alignItems: 'center',
+    justifyContent: 'center',
+    ...shadows.lg,
+  },
+  testTapButtonPressed: {
+    opacity: 0.8,
+    transform: [{ scale: 0.98 }],
+  },
+  testTapButtonText: {
+    fontSize: typography.h3,
+    fontWeight: typography.bold,
+    color: '#FFFFFF',
+    textAlign: 'center',
+  },
+  testFABButton: {
+    position: 'absolute',
+    top: 24,
+    left: 24,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
+    borderRadius: borderRadius.lg,
+    backgroundColor: '#4ECDC4',
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 9999,
+    elevation: 20,
+    ...shadows.lg,
+  },
+  testFABButtonPressed: {
+    opacity: 0.8,
+    transform: [{ scale: 0.95 }],
+  },
+  testFABButtonText: {
+    fontSize: typography.body,
+    fontWeight: typography.bold,
+    color: '#FFFFFF',
   },
   listHeader: {
     flexDirection: 'row',
