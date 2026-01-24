@@ -1,8 +1,5 @@
 
 import React, { useState, useCallback } from 'react';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { colors, typography, spacing, borderRadius, shadows } from '@/styles/commonStyles';
-import { IconSymbol } from '@/components/IconSymbol';
 import {
   View,
   Text,
@@ -12,24 +9,32 @@ import {
   ActivityIndicator,
   Alert,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
-import { getAllPatients } from '@/utils/localStorage';
+import { colors, typography, spacing, borderRadius, shadows } from '@/styles/commonStyles';
+import { IconSymbol } from '@/components/IconSymbol';
 import { Patient, AlertStatus, SortOption } from '@/types/patient';
+import { getAllPatients } from '@/utils/localStorage';
 
 export default function HomeScreen({ navigation }: any) {
-  console.log('[HomeScreen] Rendered - local-only mode (iOS)');
+  console.log('[HomeScreen] Component rendered');
   const [patients, setPatients] = useState<Patient[]>([]);
   const [loading, setLoading] = useState(true);
   const [sortBy, setSortBy] = useState<SortOption>('status');
   const [showSortMenu, setShowSortMenu] = useState(false);
 
   const loadPatients = useCallback(async () => {
+    console.log('[HomeScreen] ========== LOAD PATIENTS START ==========');
     console.log('[HomeScreen] Loading patients from local storage');
     setLoading(true);
     try {
       const patientsData = await getAllPatients();
       console.log('[HomeScreen] Loaded', patientsData.length, 'patients from local storage');
+      console.log('[HomeScreen] Patient IDs:', patientsData.map(p => p.id).join(', '));
+      console.log('[HomeScreen] Patient names:', patientsData.map(p => p.name).join(', '));
       setPatients(patientsData);
+      console.log('[HomeScreen] State updated with', patientsData.length, 'patients');
+      console.log('[HomeScreen] ========== LOAD PATIENTS END ==========');
     } catch (err: any) {
       console.error('[HomeScreen] Error loading patients:', err);
       Alert.alert(
@@ -51,6 +56,7 @@ export default function HomeScreen({ navigation }: any) {
     }
   }, []);
 
+  // Refresh patient list when screen comes into focus (e.g., after adding/editing a patient)
   useFocusEffect(
     useCallback(() => {
       console.log('[HomeScreen] Screen focused - refreshing patient list');
@@ -84,12 +90,12 @@ export default function HomeScreen({ navigation }: any) {
   };
 
   const handlePatientPress = (patientId: string) => {
-    console.log('User tapped patient card:', patientId);
+    console.log('[HomeScreen] User tapped patient card:', patientId);
     navigation.navigate('PatientDetail', { id: patientId });
   };
 
   const handleAddPatient = () => {
-    console.log('Opening Add Patient screen...');
+    console.log('[HomeScreen] User tapped Add Patient button');
     navigation.navigate('AddPatient');
   };
 
@@ -139,6 +145,7 @@ export default function HomeScreen({ navigation }: any) {
 
   const sortedPatients = sortPatients(patients, sortBy);
   const currentSortLabel = getSortLabel(sortBy);
+  const patientCountText = `${sortedPatients.length}`;
 
   return (
     <SafeAreaView style={styles.safeArea} edges={['top']}>
@@ -169,13 +176,16 @@ export default function HomeScreen({ navigation }: any) {
             <View style={styles.listHeaderLeft}>
               <Text style={styles.listTitle}>Patients</Text>
               <View style={styles.countBadge}>
-                <Text style={styles.patientCount}>{sortedPatients.length}</Text>
+                <Text style={styles.patientCount}>{patientCountText}</Text>
               </View>
             </View>
             
             <TouchableOpacity
               style={styles.sortButton}
-              onPress={() => setShowSortMenu(!showSortMenu)}
+              onPress={() => {
+                console.log('[HomeScreen] User tapped sort button');
+                setShowSortMenu(!showSortMenu);
+              }}
             >
               <IconSymbol
                 ios_icon_name="arrow.up.arrow.down"
@@ -199,7 +209,7 @@ export default function HomeScreen({ navigation }: any) {
                     <TouchableOpacity
                       style={[styles.sortMenuItem, isActive && styles.sortMenuItemActive]}
                       onPress={() => {
-                        console.log('User selected sort option:', option);
+                        console.log('[HomeScreen] User selected sort option:', option);
                         setSortBy(option);
                         setShowSortMenu(false);
                       }}
