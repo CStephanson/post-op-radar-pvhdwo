@@ -1,7 +1,8 @@
 // Initialize Natively console log capture before anything else
 import './utils/errorLogger';
 
+// Entry point for React Navigation
+import { registerRootComponent } from 'expo';
+import RootLayout from './app/_layout';
 
-// Entry point for Expo Router
-// This file must only contain the single import statement below
-import 'expo-router/entry';
+registerRootComponent(RootLayout);

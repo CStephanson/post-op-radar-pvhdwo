@@ -10,7 +10,6 @@ import {
   DarkTheme,
   DefaultTheme,
   Theme,
-  ThemeProvider,
   NavigationContainer,
 } from "@react-navigation/native";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
@@ -134,56 +133,52 @@ export default function RootLayout() {
   return (
     <ErrorBoundary>
       <StatusBar style="auto" animated />
-      <ThemeProvider
-        value={colorScheme === "dark" ? CustomDarkTheme : CustomDefaultTheme}
-      >
-        <WidgetProvider>
-          <GestureHandlerRootView style={{ flex: 1 }}>
-            <NavigationContainer>
-              <Stack.Navigator
-                initialRouteName="Home"
-                screenOptions={{
-                  headerShown: false,
+      <WidgetProvider>
+        <GestureHandlerRootView style={{ flex: 1 }}>
+          <NavigationContainer theme={colorScheme === "dark" ? CustomDarkTheme : CustomDefaultTheme}>
+            <Stack.Navigator
+              initialRouteName="Home"
+              screenOptions={{
+                headerShown: false,
+              }}
+            >
+              <Stack.Screen 
+                name="Home" 
+                component={HomeScreen}
+                options={{ headerShown: false }}
+              />
+              <Stack.Screen 
+                name="AddPatient" 
+                component={AddPatientScreen}
+                options={{ 
+                  headerShown: true, 
+                  title: 'Add Patient',
+                  headerBackTitle: 'Back',
                 }}
-              >
-                <Stack.Screen 
-                  name="Home" 
-                  component={HomeScreen}
-                  options={{ headerShown: false }}
-                />
-                <Stack.Screen 
-                  name="AddPatient" 
-                  component={AddPatientScreen}
-                  options={{ 
-                    headerShown: true, 
-                    title: 'Add Patient',
-                    headerBackTitle: 'Back',
-                  }}
-                />
-                <Stack.Screen 
-                  name="PatientDetail" 
-                  component={PatientDetailScreen}
-                  options={{ 
-                    headerShown: true, 
-                    title: 'Patient Details',
-                    headerBackTitle: 'Back',
-                  }}
-                />
-                <Stack.Screen 
-                  name="PatientInfo" 
-                  component={PatientInfoScreen}
-                  options={{ 
-                    headerShown: true, 
-                    title: 'Patient Information',
-                    headerBackTitle: 'Back',
-                  }}
-                />
-              </Stack.Navigator>
-            </NavigationContainer>
-            <SystemBars style={"auto"} />
-          </GestureHandlerRootView>
-        </WidgetProvider>
-      </ThemeProvider>
+              />
+              <Stack.Screen 
+                name="PatientDetail" 
+                component={PatientDetailScreen}
+                options={{ 
+                  headerShown: true, 
+                  title: 'Patient Details',
+                  headerBackTitle: 'Back',
+                }}
+              />
+              <Stack.Screen 
+                name="PatientInfo" 
+                component={PatientInfoScreen}
+                options={{ 
+                  headerShown: false,
+                  title: 'Patient Information',
+                  headerBackTitle: 'Back',
+                }}
+              />
+            </Stack.Navigator>
+          </NavigationContainer>
+          <SystemBars style={"auto"} />
+        </GestureHandlerRootView>
+      </WidgetProvider>
     </ErrorBoundary>
   );
 }

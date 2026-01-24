@@ -12,7 +12,7 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useRouter, useLocalSearchParams, Stack } from 'expo-router';
+import { useRoute, useNavigation } from '@react-navigation/native';
 import { colors, typography, spacing, borderRadius, shadows } from '@/styles/commonStyles';
 import { IconSymbol } from '@/components/IconSymbol';
 import { useUnsavedChanges } from '@/hooks/useUnsavedChanges';
@@ -20,8 +20,9 @@ import DateTimePicker from '@react-native-community/datetimepicker';
 
 export default function PatientInfoScreen() {
   console.log('PatientInfoScreen rendered');
-  const router = useRouter();
-  const { id } = useLocalSearchParams();
+  const navigation = useNavigation();
+  const route = useRoute();
+  const { id } = route.params as { id: string };
   
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -169,7 +170,7 @@ export default function PatientInfoScreen() {
       
       // Navigate back after save completes (if requested)
       if (shouldNavigate) {
-        router.back();
+        navigation.goBack();
       }
     } catch (error: any) {
       console.error('[PatientInfo] Error saving patient info:', error);
@@ -181,7 +182,7 @@ export default function PatientInfoScreen() {
     } finally {
       setSaving(false);
     }
-  }, [id, name, idStatement, procedureType, preOpDiagnosis, postOpDiagnosis, specimensTaken, estimatedBloodLoss, complications, operationDateTime, surgeon, anesthesiologist, anesthesiaType, clinicalStatus, hospitalLocation, statusMode, manualStatus, router]);
+  }, [id, name, idStatement, procedureType, preOpDiagnosis, postOpDiagnosis, specimensTaken, estimatedBloodLoss, complications, operationDateTime, surgeon, anesthesiologist, anesthesiaType, clinicalStatus, hospitalLocation, statusMode, manualStatus, navigation]);
 
   const loadPatientInfo = useCallback(async () => {
     console.log('[PatientInfo] Loading patient info for ID:', id);
@@ -193,7 +194,7 @@ export default function PatientInfoScreen() {
       if (!patient) {
         console.error('[PatientInfo] Patient not found in local storage');
         Alert.alert('Error', 'Patient not found', [
-          { text: 'OK', onPress: () => router.back() }
+          { text: 'OK', onPress: () => navigation.goBack() }
         ]);
         return;
       }
@@ -240,12 +241,12 @@ export default function PatientInfoScreen() {
       console.error('[PatientInfo] Error loading patient info:', error);
       Alert.alert('Storage Error', 'Failed to load patient information from local storage', [
         { text: 'Retry', onPress: loadPatientInfo },
-        { text: 'Cancel', onPress: () => router.back() }
+        { text: 'Cancel', onPress: () => navigation.goBack() }
       ]);
     } finally {
       setLoading(false);
     }
-  }, [id, router]);
+  }, [id, navigation]);
 
   // Unsaved changes protection
   const { handleBackPress, isNavigating } = useUnsavedChanges({
@@ -307,7 +308,7 @@ export default function PatientInfoScreen() {
               
               console.log('[PatientInfo] Patient deleted from local storage');
               Alert.alert('Success', 'Patient deleted successfully');
-              router.replace('/(tabs)/(home)/');
+              navigation.navigate('Home' as never);
             } catch (error: any) {
               console.error('[PatientInfo] Error deleting patient:', error);
               Alert.alert('Storage Error', 'Failed to delete patient from local storage. Please try again.', [
@@ -334,16 +335,32 @@ export default function PatientInfoScreen() {
   const dateText = formatDate(operationDateTime);
   const isSaving = saving || isNavigating;
 
+  // Set header options
+  useEffect(() => {
+    navigation.setOptions({
+      headerShown: true,
+      title: 'Patient Information',
+      headerBackTitle: 'Back',
+      headerStyle: {
+        backgroundColor: colors.backgroundAlt,
+      },
+      headerTintColor: colors.primary,
+      headerLeft: () => (
+        <TouchableOpacity onPress={handleBackPress} style={styles.backButton}>
+          <IconSymbol
+            ios_icon_name="chevron.left"
+            android_material_icon_name="arrow-back"
+            size={24}
+            color={colors.primary}
+          />
+        </TouchableOpacity>
+      ),
+    });
+  }, [navigation, handleBackPress]);
+
   if (loading) {
     return (
       <SafeAreaView style={styles.safeArea}>
-        <Stack.Screen
-          options={{
-            headerShown: true,
-            title: 'Patient Information',
-            headerBackTitle: 'Back',
-          }}
-        />
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color={colors.primary} />
           <Text style={styles.loadingText}>Loading patient information...</Text>
@@ -354,27 +371,6 @@ export default function PatientInfoScreen() {
 
   return (
     <SafeAreaView style={styles.safeArea} edges={['top']}>
-      <Stack.Screen
-        options={{
-          headerShown: true,
-          title: 'Patient Information',
-          headerBackTitle: 'Back',
-          headerStyle: {
-            backgroundColor: colors.backgroundAlt,
-          },
-          headerTintColor: colors.primary,
-          headerLeft: () => (
-            <TouchableOpacity onPress={handleBackPress} style={styles.backButton}>
-              <IconSymbol
-                ios_icon_name="chevron.left"
-                android_material_icon_name="arrow-back"
-                size={24}
-                color={colors.primary}
-              />
-            </TouchableOpacity>
-          ),
-        }}
-      />
       <ScrollView
         style={styles.scrollView}
         contentContainerStyle={styles.scrollContent}
