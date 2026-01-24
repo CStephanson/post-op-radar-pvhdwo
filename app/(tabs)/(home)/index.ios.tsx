@@ -8,6 +8,7 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   Alert,
+  Pressable,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
@@ -95,8 +96,17 @@ export default function HomeScreen({ navigation }: any) {
   };
 
   const handleAddPatient = () => {
+    console.log('[HomeScreen] ========== ADD PATIENT BUTTON PRESSED ==========');
     console.log('[HomeScreen] User tapped Add Patient button');
-    navigation.navigate('AddPatient');
+    Alert.alert('Add Patient button pressed', 'Navigation will occur now', [
+      {
+        text: 'OK',
+        onPress: () => {
+          console.log('[HomeScreen] Navigating to AddPatient screen');
+          navigation.navigate('AddPatient');
+        }
+      }
+    ]);
   };
 
   const getAlertColor = (status: AlertStatus) => {
@@ -340,20 +350,27 @@ export default function HomeScreen({ navigation }: any) {
                   </React.Fragment>
                 );
               })}
-
-              <TouchableOpacity style={styles.fabButton} onPress={handleAddPatient}>
-                <IconSymbol
-                  ios_icon_name="plus"
-                  android_material_icon_name="add"
-                  size={24}
-                  color="#FFFFFF"
-                />
-              </TouchableOpacity>
             </>
           )}
 
           <View style={styles.bottomSpacer} />
         </ScrollView>
+
+        <Pressable
+          onPress={handleAddPatient}
+          style={({ pressed }) => [
+            styles.fabButton,
+            pressed && styles.fabButtonPressed
+          ]}
+          hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+        >
+          <IconSymbol
+            ios_icon_name="plus"
+            android_material_icon_name="add"
+            size={28}
+            color="#FFFFFF"
+          />
+        </Pressable>
       </View>
     </SafeAreaView>
   );
@@ -649,15 +666,21 @@ const styles = StyleSheet.create({
   },
   fabButton: {
     position: 'absolute',
-    right: spacing.xl,
-    bottom: spacing.xl + spacing.md,
-    width: 56,
-    height: 56,
-    borderRadius: 28,
+    bottom: 24,
+    right: 24,
+    width: 64,
+    height: 64,
+    borderRadius: 32,
     backgroundColor: colors.primary,
     justifyContent: 'center',
     alignItems: 'center',
+    zIndex: 9999,
+    elevation: 10,
     ...shadows.lg,
+  },
+  fabButtonPressed: {
+    opacity: 0.8,
+    transform: [{ scale: 0.95 }],
   },
   bottomSpacer: {
     height: spacing.xxxxl * 2,
