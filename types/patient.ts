@@ -19,6 +19,7 @@ export interface UserProfile {
   updatedAt: Date;
 }
 
+// Legacy VitalSigns interface (kept for backward compatibility)
 export interface VitalSigns {
   id?: string;
   heartRate: number;
@@ -29,6 +30,7 @@ export interface VitalSigns {
   timestamp: Date;
 }
 
+// Legacy LabValues interface (kept for backward compatibility)
 export interface LabValues {
   id?: string;
   wbc: number; // White blood cell count
@@ -36,6 +38,39 @@ export interface LabValues {
   creatinine: number;
   lactate?: number;
   timestamp: Date;
+}
+
+// NEW: Comprehensive VitalEntry interface with all fields
+export interface VitalEntry {
+  id: string;
+  timestamp: Date;
+  hr?: number; // Heart rate
+  bpSys?: number; // Systolic BP
+  bpDia?: number; // Diastolic BP
+  rr?: number; // Respiratory rate
+  temp?: number; // Temperature
+  spo2?: number; // SpO2
+  urineOutput?: number; // ml/hr
+  pain?: number; // Pain scale 0-10
+  notes?: string;
+}
+
+// NEW: Comprehensive LabEntry interface with all fields
+export interface LabEntry {
+  id: string;
+  timestamp: Date;
+  wbc?: number; // White blood cell count
+  hb?: number; // Hemoglobin
+  plt?: number; // Platelets
+  na?: number; // Sodium
+  k?: number; // Potassium
+  cr?: number; // Creatinine
+  lactate?: number;
+  bili?: number; // Bilirubin
+  alt?: number; // ALT
+  ast?: number; // AST
+  inr?: number; // INR
+  notes?: string;
 }
 
 export interface Patient {
@@ -65,8 +100,14 @@ export interface Patient {
   clinicalStatus?: string;
   hospitalLocation?: string;
   
+  // Legacy vitals/labs arrays (kept for backward compatibility)
   vitals: VitalSigns[];
   labs: LabValues[];
+  
+  // NEW: Comprehensive vitals/labs arrays
+  vitalEntries?: VitalEntry[];
+  labEntries?: LabEntry[];
+  
   notes?: string;
   createdAt: Date;
   updatedAt: Date;

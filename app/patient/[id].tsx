@@ -15,33 +15,50 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { colors, typography, spacing, borderRadius, shadows } from '@/styles/commonStyles';
 import { IconSymbol } from '@/components/IconSymbol';
-import { Patient, Alert as PatientAlert, AlertStatus, TrendData, VitalSigns, LabValues } from '@/types/patient';
+import { Patient, Alert as PatientAlert, AlertStatus, TrendData, VitalEntry, LabEntry } from '@/types/patient';
 import { calculateTrends, generateAlerts, calculateAlertStatus } from '@/utils/alertLogic';
+import { getPatientById, addVitalEntry, addLabEntry, deleteVitalEntry, deleteLabEntry } from '@/utils/localStorage';
 
 export default function PatientDetailScreen({ route, navigation }: any) {
-  console.log('PatientDetailScreen rendered');
+  console.log('[PatientDetail] Component rendered');
   const { id } = route.params;
+  console.log('[PatientDetail] Patient ID from route params:', id);
+  
   const [patient, setPatient] = useState<Patient | null>(null);
   const [alerts, setAlerts] = useState<PatientAlert[]>([]);
   const [trends, setTrends] = useState<TrendData[]>([]);
   const [editModalVisible, setEditModalVisible] = useState(false);
   const [editType, setEditType] = useState<'vitals' | 'labs'>('vitals');
   
-  // Edit form state
-  const [editHeartRate, setEditHeartRate] = useState('');
-  const [editSystolicBP, setEditSystolicBP] = useState('');
-  const [editDiastolicBP, setEditDiastolicBP] = useState('');
-  const [editTemperature, setEditTemperature] = useState('');
+  // Edit form state for vitals
+  const [editHr, setEditHr] = useState('');
+  const [editBpSys, setEditBpSys] = useState('');
+  const [editBpDia, setEditBpDia] = useState('');
+  const [editRr, setEditRr] = useState('');
+  const [editTemp, setEditTemp] = useState('');
+  const [editSpo2, setEditSpo2] = useState('');
   const [editUrineOutput, setEditUrineOutput] = useState('');
-  const [editWBC, setEditWBC] = useState('');
-  const [editHemoglobin, setEditHemoglobin] = useState('');
-  const [editCreatinine, setEditCreatinine] = useState('');
+  const [editPain, setEditPain] = useState('');
+  const [editVitalNotes, setEditVitalNotes] = useState('');
+  
+  // Edit form state for labs
+  const [editWbc, setEditWbc] = useState('');
+  const [editHb, setEditHb] = useState('');
+  const [editPlt, setEditPlt] = useState('');
+  const [editNa, setEditNa] = useState('');
+  const [editK, setEditK] = useState('');
+  const [editCr, setEditCr] = useState('');
   const [editLactate, setEditLactate] = useState('');
+  const [editBili, setEditBili] = useState('');
+  const [editAlt, setEditAlt] = useState('');
+  const [editAst, setEditAst] = useState('');
+  const [editInr, setEditInr] = useState('');
+  const [editLabNotes, setEditLabNotes] = useState('');
 
   const loadPatientData = useCallback(async () => {
+    console.log('[PatientDetail] ========== LOAD PATIENT DATA START ==========');
     console.log('[PatientDetail] Loading patient data for ID:', id);
     try {
-      const { getPatientById } = await import('@/utils/localStorage');
       const patientData = await getPatientById(id as string);
       
       if (!patientData) {
@@ -53,8 +70,20 @@ export default function PatientDetailScreen({ route, navigation }: any) {
       }
       
       console.log('[PatientDetail] Patient loaded from local storage:', patientData.name);
+      console.log('[PatientDetail] Patient ID:', patientData.id);
+      console.log('[PatientDetail] Patient has', patientData.vitalEntries?.length || 0, 'vital entries');
+      console.log('[PatientDetail] Patient has', patientData.labEntries?.length || 0, 'lab entries');
+      
+      if (patientData.vitalEntries && patientData.vitalEntries.length > 0) {
+        console.log('[PatientDetail] First vital entry:', JSON.stringify(patientData.vitalEntries[0]));
+      }
+      if (patientData.labEntries && patientData.labEntries.length > 0) {
+        console.log('[PatientDetail] First lab entry:', JSON.stringify(patientData.labEntries[0]));
+      }
+      
       setPatient(patientData);
       updatePatientAnalysis(patientData);
+      console.log('[PatientDetail] ========== LOAD PATIENT DATA END ==========');
     } catch (error: any) {
       console.error('[PatientDetail] Error loading patient data:', error);
       Alert.alert('Storage Error', 'Failed to load patient data from local storage', [
@@ -80,109 +109,220 @@ export default function PatientDetailScreen({ route, navigation }: any) {
     
     // Respect manual status override - do NOT overwrite user-selected status
     if (updatedPatient.statusMode === 'manual' && updatedPatient.manualStatus) {
-      console.log('Manual status override active - using manual status:', updatedPatient.manualStatus);
+      console.log('[PatientDetail] Manual status override active - using manual status:', updatedPatient.manualStatus);
       updatedPatient.alertStatus = updatedPatient.manualStatus;
     } else {
-      console.log('Auto status mode - using computed status:', computedStatus);
+      console.log('[PatientDetail] Auto status mode - using computed status:', computedStatus);
       updatedPatient.alertStatus = computedStatus;
     }
   };
 
   const openEditModal = (type: 'vitals' | 'labs') => {
-    console.log('User tapped edit button for:', type);
-    if (!patient) return;
-    
+    console.log('[PatientDetail] User tapped Add button for:', type);
     setEditType(type);
     
+    // Clear all form fields for new entry
     if (type === 'vitals') {
-      const latestVitals = patient.vitals && patient.vitals.length > 0 
-        ? patient.vitals[patient.vitals.length - 1]
-        : null;
-      
-      setEditHeartRate(latestVitals?.heartRate.toString() || '');
-      setEditSystolicBP(latestVitals?.systolicBP.toString() || '');
-      setEditDiastolicBP(latestVitals?.diastolicBP.toString() || '');
-      setEditTemperature(latestVitals?.temperature.toFixed(1) || '');
-      setEditUrineOutput(latestVitals?.urineOutput?.toString() || '');
+      setEditHr('');
+      setEditBpSys('');
+      setEditBpDia('');
+      setEditRr('');
+      setEditTemp('');
+      setEditSpo2('');
+      setEditUrineOutput('');
+      setEditPain('');
+      setEditVitalNotes('');
     } else {
-      const latestLabs = patient.labs && patient.labs.length > 0
-        ? patient.labs[patient.labs.length - 1]
-        : null;
-      
-      setEditWBC(latestLabs?.wbc.toFixed(1) || '');
-      setEditHemoglobin(latestLabs?.hemoglobin.toFixed(1) || '');
-      setEditCreatinine(latestLabs?.creatinine.toFixed(1) || '');
-      setEditLactate(latestLabs?.lactate?.toFixed(1) || '');
+      setEditWbc('');
+      setEditHb('');
+      setEditPlt('');
+      setEditNa('');
+      setEditK('');
+      setEditCr('');
+      setEditLactate('');
+      setEditBili('');
+      setEditAlt('');
+      setEditAst('');
+      setEditInr('');
+      setEditLabNotes('');
     }
     
     setEditModalVisible(true);
   };
 
   const saveEdits = async () => {
-    console.log('[PatientDetail] User saved edits for:', editType);
-    if (!patient) return;
+    console.log('[PatientDetail] ========== SAVE ENTRY START ==========');
+    console.log('[PatientDetail] User tapped Save button for:', editType);
+    if (!patient) {
+      console.error('[PatientDetail] Cannot save - patient is null');
+      return;
+    }
+    
+    console.log('[PatientDetail] Current patient ID:', patient.id);
+    console.log('[PatientDetail] Current patient name:', patient.name);
     
     try {
-      const { updatePatient } = await import('@/utils/localStorage');
-      
       if (editType === 'vitals') {
-        // Add new vitals entry
-        const newVitals: VitalSigns = {
-          heartRate: parseFloat(editHeartRate) || 0,
-          systolicBP: parseFloat(editSystolicBP) || 0,
-          diastolicBP: parseFloat(editDiastolicBP) || 0,
-          temperature: parseFloat(editTemperature) || 0,
+        // Validate: at least one vital value must be entered
+        const hasValue = editHr || editBpSys || editBpDia || editRr || editTemp || editSpo2 || editUrineOutput || editPain;
+        if (!hasValue) {
+          console.log('[PatientDetail] Validation failed - no vital values entered');
+          Alert.alert('Validation Error', 'Please enter at least one vital sign value');
+          return;
+        }
+        
+        console.log('[PatientDetail] Validation passed - creating vital entry');
+        
+        // Create new vital entry
+        const newVitalEntry: Omit<VitalEntry, 'id'> = {
+          timestamp: new Date(),
+          hr: editHr ? parseFloat(editHr) : undefined,
+          bpSys: editBpSys ? parseFloat(editBpSys) : undefined,
+          bpDia: editBpDia ? parseFloat(editBpDia) : undefined,
+          rr: editRr ? parseFloat(editRr) : undefined,
+          temp: editTemp ? parseFloat(editTemp) : undefined,
+          spo2: editSpo2 ? parseFloat(editSpo2) : undefined,
           urineOutput: editUrineOutput ? parseFloat(editUrineOutput) : undefined,
-          timestamp: new Date(),
+          pain: editPain ? parseFloat(editPain) : undefined,
+          notes: editVitalNotes.trim() || undefined,
         };
         
-        console.log('[PatientDetail] Adding new vitals:', newVitals);
-        const updatedPatient = { ...patient, vitals: [...patient.vitals, newVitals] };
+        console.log('[PatientDetail] New vital entry to save:', JSON.stringify(newVitalEntry));
+        console.log('[PatientDetail] Calling addVitalEntry for patient:', patient.id);
+        
+        // Add vital entry to patient (this saves to storage)
+        const updatedPatient = await addVitalEntry(patient.id, newVitalEntry);
+        
+        console.log('[PatientDetail] addVitalEntry returned successfully');
+        console.log('[PatientDetail] Updated patient has', updatedPatient.vitalEntries?.length || 0, 'vital entries');
+        
+        // Update local state
+        setPatient(updatedPatient);
         updatePatientAnalysis(updatedPatient);
         
-        // Save to local storage with ALL fields including new vitals
-        await updatePatient(patient.id, {
-          vitals: updatedPatient.vitals,
-          alertStatus: updatedPatient.alertStatus,
-          computedStatus: updatedPatient.computedStatus,
-        });
-        
-        setPatient(updatedPatient);
-        console.log('[PatientDetail] Vitals saved to local storage');
+        const successMessage = `Vital signs saved! Total entries: ${updatedPatient.vitalEntries?.length || 0}`;
+        console.log('[PatientDetail]', successMessage);
+        Alert.alert('Success', successMessage);
       } else {
-        // Add new labs entry
-        const newLabs: LabValues = {
-          wbc: parseFloat(editWBC) || 0,
-          hemoglobin: parseFloat(editHemoglobin) || 0,
-          creatinine: parseFloat(editCreatinine) || 0,
-          lactate: editLactate ? parseFloat(editLactate) : undefined,
+        // Validate: at least one lab value must be entered
+        const hasValue = editWbc || editHb || editPlt || editNa || editK || editCr || editLactate || editBili || editAlt || editAst || editInr;
+        if (!hasValue) {
+          console.log('[PatientDetail] Validation failed - no lab values entered');
+          Alert.alert('Validation Error', 'Please enter at least one lab value');
+          return;
+        }
+        
+        console.log('[PatientDetail] Validation passed - creating lab entry');
+        
+        // Create new lab entry
+        const newLabEntry: Omit<LabEntry, 'id'> = {
           timestamp: new Date(),
+          wbc: editWbc ? parseFloat(editWbc) : undefined,
+          hb: editHb ? parseFloat(editHb) : undefined,
+          plt: editPlt ? parseFloat(editPlt) : undefined,
+          na: editNa ? parseFloat(editNa) : undefined,
+          k: editK ? parseFloat(editK) : undefined,
+          cr: editCr ? parseFloat(editCr) : undefined,
+          lactate: editLactate ? parseFloat(editLactate) : undefined,
+          bili: editBili ? parseFloat(editBili) : undefined,
+          alt: editAlt ? parseFloat(editAlt) : undefined,
+          ast: editAst ? parseFloat(editAst) : undefined,
+          inr: editInr ? parseFloat(editInr) : undefined,
+          notes: editLabNotes.trim() || undefined,
         };
         
-        console.log('[PatientDetail] Adding new labs:', newLabs);
-        const updatedPatient = { ...patient, labs: [...patient.labs, newLabs] };
+        console.log('[PatientDetail] New lab entry to save:', JSON.stringify(newLabEntry));
+        console.log('[PatientDetail] Calling addLabEntry for patient:', patient.id);
+        
+        // Add lab entry to patient (this saves to storage)
+        const updatedPatient = await addLabEntry(patient.id, newLabEntry);
+        
+        console.log('[PatientDetail] addLabEntry returned successfully');
+        console.log('[PatientDetail] Updated patient has', updatedPatient.labEntries?.length || 0, 'lab entries');
+        
+        // Update local state
+        setPatient(updatedPatient);
         updatePatientAnalysis(updatedPatient);
         
-        // Save to local storage with ALL fields including new labs
-        await updatePatient(patient.id, {
-          labs: updatedPatient.labs,
-          alertStatus: updatedPatient.alertStatus,
-          computedStatus: updatedPatient.computedStatus,
-        });
-        
-        setPatient(updatedPatient);
-        console.log('[PatientDetail] Labs saved to local storage');
+        const successMessage = `Lab values saved! Total entries: ${updatedPatient.labEntries?.length || 0}`;
+        console.log('[PatientDetail]', successMessage);
+        Alert.alert('Success', successMessage);
       }
       
       setEditModalVisible(false);
-      Alert.alert('Success', 'Data saved successfully');
+      console.log('[PatientDetail] ========== SAVE ENTRY END ==========');
     } catch (error: any) {
-      console.error('[PatientDetail] Error saving data:', error);
+      console.error('[PatientDetail] ========== SAVE ENTRY ERROR ==========');
+      console.error('[PatientDetail] Error saving entry:', error);
+      console.error('[PatientDetail] Error message:', error.message);
+      console.error('[PatientDetail] Error stack:', error.stack);
       Alert.alert('Storage Error', 'Failed to save data to local storage. Please try again.', [
         { text: 'Retry', onPress: saveEdits },
         { text: 'Cancel', style: 'cancel' }
       ]);
     }
+  };
+
+  const handleDeleteVital = async (vitalId: string) => {
+    if (!patient) return;
+    
+    console.log('[PatientDetail] User requested to delete vital entry:', vitalId);
+    
+    Alert.alert(
+      'Delete Vital Entry',
+      'Are you sure you want to delete this vital signs entry?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              console.log('[PatientDetail] Deleting vital entry:', vitalId);
+              const updatedPatient = await deleteVitalEntry(patient.id, vitalId);
+              setPatient(updatedPatient);
+              updatePatientAnalysis(updatedPatient);
+              console.log('[PatientDetail] Vital entry deleted successfully');
+              Alert.alert('Success', 'Vital entry deleted');
+            } catch (error) {
+              console.error('[PatientDetail] Error deleting vital entry:', error);
+              Alert.alert('Error', 'Failed to delete vital entry');
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  const handleDeleteLab = async (labId: string) => {
+    if (!patient) return;
+    
+    console.log('[PatientDetail] User requested to delete lab entry:', labId);
+    
+    Alert.alert(
+      'Delete Lab Entry',
+      'Are you sure you want to delete this lab values entry?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              console.log('[PatientDetail] Deleting lab entry:', labId);
+              const updatedPatient = await deleteLabEntry(patient.id, labId);
+              setPatient(updatedPatient);
+              updatePatientAnalysis(updatedPatient);
+              console.log('[PatientDetail] Lab entry deleted successfully');
+              Alert.alert('Success', 'Lab entry deleted');
+            } catch (error) {
+              console.error('[PatientDetail] Error deleting lab entry:', error);
+              Alert.alert('Error', 'Failed to delete lab entry');
+            }
+          },
+        },
+      ]
+    );
   };
 
   if (!patient) {
@@ -194,13 +334,6 @@ export default function PatientDetailScreen({ route, navigation }: any) {
       </SafeAreaView>
     );
   }
-
-  const latestVitals = patient.vitals && patient.vitals.length > 0 
-    ? patient.vitals[patient.vitals.length - 1]
-    : { heartRate: 0, systolicBP: 0, diastolicBP: 0, temperature: 0, urineOutput: undefined, timestamp: new Date() };
-  const latestLabs = patient.labs && patient.labs.length > 0
-    ? patient.labs[patient.labs.length - 1]
-    : { wbc: 0, hemoglobin: 0, creatinine: 0, lactate: undefined, timestamp: new Date() };
 
   const getAlertColor = (status: AlertStatus) => {
     if (status === 'green') return colors.alertGreen;
@@ -232,18 +365,32 @@ export default function PatientDetailScreen({ route, navigation }: any) {
     return colors.textSecondary;
   };
 
+  const formatTimestamp = (date: Date) => {
+    return date.toLocaleString('en-US', {
+      month: 'short',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+    });
+  };
+
   const alertColor = getAlertColor(patient.alertStatus);
   const alertBgColor = getAlertBgColor(patient.alertStatus);
   const alertBorderColor = getAlertBorderColor(patient.alertStatus);
   const podText = `Post-Operative Day ${patient.postOpDay}`;
-  const bpText = `${latestVitals.systolicBP}/${latestVitals.diastolicBP}`;
-  const hrText = `${latestVitals.heartRate}`;
-  const tempText = `${latestVitals.temperature.toFixed(1)}`;
-  const uoText = latestVitals.urineOutput ? `${latestVitals.urineOutput}` : 'N/A';
-  const wbcText = `${latestLabs.wbc.toFixed(1)}`;
-  const hgbText = `${latestLabs.hemoglobin.toFixed(1)}`;
-  const creatText = `${latestLabs.creatinine.toFixed(1)}`;
-  const lactateText = latestLabs.lactate ? `${latestLabs.lactate.toFixed(1)}` : 'N/A';
+
+  // Sort entries by timestamp (most recent first)
+  const sortedVitals = [...(patient.vitalEntries || [])].sort((a, b) => 
+    new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
+  );
+  const sortedLabs = [...(patient.labEntries || [])].sort((a, b) => 
+    new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
+  );
+
+  const vitalCountText = `${sortedVitals.length}`;
+  const labCountText = `${sortedLabs.length}`;
+
+  console.log('[PatientDetail] Rendering with', sortedVitals.length, 'vitals and', sortedLabs.length, 'labs');
 
   return (
     <SafeAreaView style={styles.safeArea} edges={['top']}>
@@ -378,46 +525,71 @@ export default function PatientDetailScreen({ route, navigation }: any) {
                 style={styles.sectionIcon}
               />
               <Text style={styles.sectionTitle}>Vital Signs</Text>
+              <View style={styles.countBadge}>
+                <Text style={styles.countText}>{vitalCountText}</Text>
+              </View>
             </View>
             <TouchableOpacity 
-              style={styles.editButton}
+              style={styles.addButton}
               onPress={() => openEditModal('vitals')}
             >
               <IconSymbol
-                ios_icon_name="pencil"
-                android_material_icon_name="edit"
+                ios_icon_name="plus"
+                android_material_icon_name="add"
                 size={16}
                 color={colors.primary}
               />
-              <Text style={styles.editButtonText}>Edit</Text>
+              <Text style={styles.addButtonText}>Add</Text>
             </TouchableOpacity>
           </View>
 
-          <View style={styles.dataGrid}>
-            <View style={styles.dataCard}>
-              <Text style={styles.dataLabel}>Heart Rate</Text>
-              <Text style={styles.dataValue}>{hrText}</Text>
-              <Text style={styles.dataUnit}>bpm</Text>
+          {sortedVitals.length === 0 ? (
+            <View style={styles.emptyState}>
+              <Text style={styles.emptyStateText}>No vital signs recorded yet</Text>
+              <Text style={styles.emptyStateSubtext}>Tap Add to record vital signs</Text>
             </View>
+          ) : (
+            <View style={styles.entriesList}>
+              {sortedVitals.map((vital) => {
+                const timestampText = formatTimestamp(new Date(vital.timestamp));
+                const hrText = vital.hr ? `HR: ${vital.hr}` : null;
+                const bpText = vital.bpSys && vital.bpDia ? `BP: ${vital.bpSys}/${vital.bpDia}` : null;
+                const tempText = vital.temp ? `Temp: ${vital.temp.toFixed(1)}°C` : null;
+                const spo2Text = vital.spo2 ? `SpO2: ${vital.spo2}%` : null;
+                const rrText = vital.rr ? `RR: ${vital.rr}` : null;
+                const uoText = vital.urineOutput ? `UO: ${vital.urineOutput} ml/hr` : null;
+                const painText = vital.pain !== undefined ? `Pain: ${vital.pain}/10` : null;
 
-            <View style={styles.dataCard}>
-              <Text style={styles.dataLabel}>Blood Pressure</Text>
-              <Text style={styles.dataValue}>{bpText}</Text>
-              <Text style={styles.dataUnit}>mmHg</Text>
+                return (
+                  <View key={vital.id} style={styles.entryCard}>
+                    <View style={styles.entryHeader}>
+                      <Text style={styles.entryTimestamp}>{timestampText}</Text>
+                      <TouchableOpacity onPress={() => handleDeleteVital(vital.id)}>
+                        <IconSymbol
+                          ios_icon_name="trash"
+                          android_material_icon_name="delete"
+                          size={18}
+                          color={colors.error}
+                        />
+                      </TouchableOpacity>
+                    </View>
+                    <View style={styles.entryValues}>
+                      {hrText && <Text style={styles.entryValue}>{hrText}</Text>}
+                      {bpText && <Text style={styles.entryValue}>{bpText}</Text>}
+                      {tempText && <Text style={styles.entryValue}>{tempText}</Text>}
+                      {spo2Text && <Text style={styles.entryValue}>{spo2Text}</Text>}
+                      {rrText && <Text style={styles.entryValue}>{rrText}</Text>}
+                      {uoText && <Text style={styles.entryValue}>{uoText}</Text>}
+                      {painText && <Text style={styles.entryValue}>{painText}</Text>}
+                    </View>
+                    {vital.notes && (
+                      <Text style={styles.entryNotes}>{vital.notes}</Text>
+                    )}
+                  </View>
+                );
+              })}
             </View>
-
-            <View style={styles.dataCard}>
-              <Text style={styles.dataLabel}>Temperature</Text>
-              <Text style={styles.dataValue}>{tempText}</Text>
-              <Text style={styles.dataUnit}>°C</Text>
-            </View>
-
-            <View style={styles.dataCard}>
-              <Text style={styles.dataLabel}>Urine Output</Text>
-              <Text style={styles.dataValue}>{uoText}</Text>
-              <Text style={styles.dataUnit}>ml/hr</Text>
-            </View>
-          </View>
+          )}
         </View>
 
         {/* Laboratory Values Section */}
@@ -432,46 +604,79 @@ export default function PatientDetailScreen({ route, navigation }: any) {
                 style={styles.sectionIcon}
               />
               <Text style={styles.sectionTitle}>Laboratory Values</Text>
+              <View style={styles.countBadge}>
+                <Text style={styles.countText}>{labCountText}</Text>
+              </View>
             </View>
             <TouchableOpacity 
-              style={styles.editButton}
+              style={styles.addButton}
               onPress={() => openEditModal('labs')}
             >
               <IconSymbol
-                ios_icon_name="pencil"
-                android_material_icon_name="edit"
+                ios_icon_name="plus"
+                android_material_icon_name="add"
                 size={16}
                 color={colors.primary}
               />
-              <Text style={styles.editButtonText}>Edit</Text>
+              <Text style={styles.addButtonText}>Add</Text>
             </TouchableOpacity>
           </View>
 
-          <View style={styles.dataGrid}>
-            <View style={styles.dataCard}>
-              <Text style={styles.dataLabel}>WBC</Text>
-              <Text style={styles.dataValue}>{wbcText}</Text>
-              <Text style={styles.dataUnit}>K/μL</Text>
+          {sortedLabs.length === 0 ? (
+            <View style={styles.emptyState}>
+              <Text style={styles.emptyStateText}>No lab values recorded yet</Text>
+              <Text style={styles.emptyStateSubtext}>Tap Add to record lab values</Text>
             </View>
+          ) : (
+            <View style={styles.entriesList}>
+              {sortedLabs.map((lab) => {
+                const timestampText = formatTimestamp(new Date(lab.timestamp));
+                const wbcText = lab.wbc ? `WBC: ${lab.wbc.toFixed(1)}` : null;
+                const hbText = lab.hb ? `Hb: ${lab.hb.toFixed(1)}` : null;
+                const pltText = lab.plt ? `Plt: ${lab.plt}` : null;
+                const naText = lab.na ? `Na: ${lab.na}` : null;
+                const kText = lab.k ? `K: ${lab.k.toFixed(1)}` : null;
+                const crText = lab.cr ? `Cr: ${lab.cr.toFixed(1)}` : null;
+                const lactateText = lab.lactate ? `Lactate: ${lab.lactate.toFixed(1)}` : null;
+                const biliText = lab.bili ? `Bili: ${lab.bili.toFixed(1)}` : null;
+                const altText = lab.alt ? `ALT: ${lab.alt}` : null;
+                const astText = lab.ast ? `AST: ${lab.ast}` : null;
+                const inrText = lab.inr ? `INR: ${lab.inr.toFixed(2)}` : null;
 
-            <View style={styles.dataCard}>
-              <Text style={styles.dataLabel}>Hemoglobin</Text>
-              <Text style={styles.dataValue}>{hgbText}</Text>
-              <Text style={styles.dataUnit}>g/dL</Text>
+                return (
+                  <View key={lab.id} style={styles.entryCard}>
+                    <View style={styles.entryHeader}>
+                      <Text style={styles.entryTimestamp}>{timestampText}</Text>
+                      <TouchableOpacity onPress={() => handleDeleteLab(lab.id)}>
+                        <IconSymbol
+                          ios_icon_name="trash"
+                          android_material_icon_name="delete"
+                          size={18}
+                          color={colors.error}
+                        />
+                      </TouchableOpacity>
+                    </View>
+                    <View style={styles.entryValues}>
+                      {wbcText && <Text style={styles.entryValue}>{wbcText}</Text>}
+                      {hbText && <Text style={styles.entryValue}>{hbText}</Text>}
+                      {pltText && <Text style={styles.entryValue}>{pltText}</Text>}
+                      {naText && <Text style={styles.entryValue}>{naText}</Text>}
+                      {kText && <Text style={styles.entryValue}>{kText}</Text>}
+                      {crText && <Text style={styles.entryValue}>{crText}</Text>}
+                      {lactateText && <Text style={styles.entryValue}>{lactateText}</Text>}
+                      {biliText && <Text style={styles.entryValue}>{biliText}</Text>}
+                      {altText && <Text style={styles.entryValue}>{altText}</Text>}
+                      {astText && <Text style={styles.entryValue}>{astText}</Text>}
+                      {inrText && <Text style={styles.entryValue}>{inrText}</Text>}
+                    </View>
+                    {lab.notes && (
+                      <Text style={styles.entryNotes}>{lab.notes}</Text>
+                    )}
+                  </View>
+                );
+              })}
             </View>
-
-            <View style={styles.dataCard}>
-              <Text style={styles.dataLabel}>Creatinine</Text>
-              <Text style={styles.dataValue}>{creatText}</Text>
-              <Text style={styles.dataUnit}>mg/dL</Text>
-            </View>
-
-            <View style={styles.dataCard}>
-              <Text style={styles.dataLabel}>Lactate</Text>
-              <Text style={styles.dataValue}>{lactateText}</Text>
-              <Text style={styles.dataUnit}>mmol/L</Text>
-            </View>
-          </View>
+          )}
         </View>
 
         {/* Trends Section */}
@@ -540,7 +745,7 @@ export default function PatientDetailScreen({ route, navigation }: any) {
         <View style={styles.bottomSpacer} />
       </ScrollView>
 
-      {/* Edit Modal */}
+      {/* Add/Edit Modal */}
       <Modal
         visible={editModalVisible}
         animationType="slide"
@@ -554,7 +759,7 @@ export default function PatientDetailScreen({ route, navigation }: any) {
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>
-                {editType === 'vitals' ? 'Edit Vital Signs' : 'Edit Laboratory Values'}
+                {editType === 'vitals' ? 'Add Vital Signs' : 'Add Laboratory Values'}
               </Text>
               <TouchableOpacity onPress={() => setEditModalVisible(false)}>
                 <IconSymbol
@@ -573,10 +778,11 @@ export default function PatientDetailScreen({ route, navigation }: any) {
                     <Text style={styles.inputLabel}>Heart Rate (bpm)</Text>
                     <TextInput
                       style={styles.input}
-                      value={editHeartRate}
-                      onChangeText={setEditHeartRate}
+                      value={editHr}
+                      onChangeText={setEditHr}
                       keyboardType="numeric"
                       placeholder="e.g., 75"
+                      placeholderTextColor={colors.textLight}
                     />
                   </View>
 
@@ -584,10 +790,11 @@ export default function PatientDetailScreen({ route, navigation }: any) {
                     <Text style={styles.inputLabel}>Systolic BP (mmHg)</Text>
                     <TextInput
                       style={styles.input}
-                      value={editSystolicBP}
-                      onChangeText={setEditSystolicBP}
+                      value={editBpSys}
+                      onChangeText={setEditBpSys}
                       keyboardType="numeric"
                       placeholder="e.g., 120"
+                      placeholderTextColor={colors.textLight}
                     />
                   </View>
 
@@ -595,10 +802,23 @@ export default function PatientDetailScreen({ route, navigation }: any) {
                     <Text style={styles.inputLabel}>Diastolic BP (mmHg)</Text>
                     <TextInput
                       style={styles.input}
-                      value={editDiastolicBP}
-                      onChangeText={setEditDiastolicBP}
+                      value={editBpDia}
+                      onChangeText={setEditBpDia}
                       keyboardType="numeric"
                       placeholder="e.g., 80"
+                      placeholderTextColor={colors.textLight}
+                    />
+                  </View>
+
+                  <View style={styles.inputGroup}>
+                    <Text style={styles.inputLabel}>Respiratory Rate (breaths/min)</Text>
+                    <TextInput
+                      style={styles.input}
+                      value={editRr}
+                      onChangeText={setEditRr}
+                      keyboardType="numeric"
+                      placeholder="e.g., 16"
+                      placeholderTextColor={colors.textLight}
                     />
                   </View>
 
@@ -606,10 +826,23 @@ export default function PatientDetailScreen({ route, navigation }: any) {
                     <Text style={styles.inputLabel}>Temperature (°C)</Text>
                     <TextInput
                       style={styles.input}
-                      value={editTemperature}
-                      onChangeText={setEditTemperature}
+                      value={editTemp}
+                      onChangeText={setEditTemp}
                       keyboardType="decimal-pad"
                       placeholder="e.g., 37.2"
+                      placeholderTextColor={colors.textLight}
+                    />
+                  </View>
+
+                  <View style={styles.inputGroup}>
+                    <Text style={styles.inputLabel}>SpO2 (%)</Text>
+                    <TextInput
+                      style={styles.input}
+                      value={editSpo2}
+                      onChangeText={setEditSpo2}
+                      keyboardType="numeric"
+                      placeholder="e.g., 98"
+                      placeholderTextColor={colors.textLight}
                     />
                   </View>
 
@@ -621,6 +854,32 @@ export default function PatientDetailScreen({ route, navigation }: any) {
                       onChangeText={setEditUrineOutput}
                       keyboardType="numeric"
                       placeholder="e.g., 50"
+                      placeholderTextColor={colors.textLight}
+                    />
+                  </View>
+
+                  <View style={styles.inputGroup}>
+                    <Text style={styles.inputLabel}>Pain Scale (0-10)</Text>
+                    <TextInput
+                      style={styles.input}
+                      value={editPain}
+                      onChangeText={setEditPain}
+                      keyboardType="numeric"
+                      placeholder="e.g., 3"
+                      placeholderTextColor={colors.textLight}
+                    />
+                  </View>
+
+                  <View style={styles.inputGroup}>
+                    <Text style={styles.inputLabel}>Notes (optional)</Text>
+                    <TextInput
+                      style={[styles.input, styles.textArea]}
+                      value={editVitalNotes}
+                      onChangeText={setEditVitalNotes}
+                      placeholder="Additional notes"
+                      placeholderTextColor={colors.textLight}
+                      multiline
+                      numberOfLines={3}
                     />
                   </View>
                 </>
@@ -630,10 +889,11 @@ export default function PatientDetailScreen({ route, navigation }: any) {
                     <Text style={styles.inputLabel}>WBC (K/μL)</Text>
                     <TextInput
                       style={styles.input}
-                      value={editWBC}
-                      onChangeText={setEditWBC}
+                      value={editWbc}
+                      onChangeText={setEditWbc}
                       keyboardType="decimal-pad"
                       placeholder="e.g., 9.5"
+                      placeholderTextColor={colors.textLight}
                     />
                   </View>
 
@@ -641,10 +901,47 @@ export default function PatientDetailScreen({ route, navigation }: any) {
                     <Text style={styles.inputLabel}>Hemoglobin (g/dL)</Text>
                     <TextInput
                       style={styles.input}
-                      value={editHemoglobin}
-                      onChangeText={setEditHemoglobin}
+                      value={editHb}
+                      onChangeText={setEditHb}
                       keyboardType="decimal-pad"
                       placeholder="e.g., 13.2"
+                      placeholderTextColor={colors.textLight}
+                    />
+                  </View>
+
+                  <View style={styles.inputGroup}>
+                    <Text style={styles.inputLabel}>Platelets (K/μL)</Text>
+                    <TextInput
+                      style={styles.input}
+                      value={editPlt}
+                      onChangeText={setEditPlt}
+                      keyboardType="numeric"
+                      placeholder="e.g., 250"
+                      placeholderTextColor={colors.textLight}
+                    />
+                  </View>
+
+                  <View style={styles.inputGroup}>
+                    <Text style={styles.inputLabel}>Sodium (mEq/L)</Text>
+                    <TextInput
+                      style={styles.input}
+                      value={editNa}
+                      onChangeText={setEditNa}
+                      keyboardType="numeric"
+                      placeholder="e.g., 140"
+                      placeholderTextColor={colors.textLight}
+                    />
+                  </View>
+
+                  <View style={styles.inputGroup}>
+                    <Text style={styles.inputLabel}>Potassium (mEq/L)</Text>
+                    <TextInput
+                      style={styles.input}
+                      value={editK}
+                      onChangeText={setEditK}
+                      keyboardType="decimal-pad"
+                      placeholder="e.g., 4.2"
+                      placeholderTextColor={colors.textLight}
                     />
                   </View>
 
@@ -652,10 +949,11 @@ export default function PatientDetailScreen({ route, navigation }: any) {
                     <Text style={styles.inputLabel}>Creatinine (mg/dL)</Text>
                     <TextInput
                       style={styles.input}
-                      value={editCreatinine}
-                      onChangeText={setEditCreatinine}
+                      value={editCr}
+                      onChangeText={setEditCr}
                       keyboardType="decimal-pad"
                       placeholder="e.g., 0.9"
+                      placeholderTextColor={colors.textLight}
                     />
                   </View>
 
@@ -667,6 +965,68 @@ export default function PatientDetailScreen({ route, navigation }: any) {
                       onChangeText={setEditLactate}
                       keyboardType="decimal-pad"
                       placeholder="e.g., 1.2"
+                      placeholderTextColor={colors.textLight}
+                    />
+                  </View>
+
+                  <View style={styles.inputGroup}>
+                    <Text style={styles.inputLabel}>Bilirubin (mg/dL)</Text>
+                    <TextInput
+                      style={styles.input}
+                      value={editBili}
+                      onChangeText={setEditBili}
+                      keyboardType="decimal-pad"
+                      placeholder="e.g., 0.8"
+                      placeholderTextColor={colors.textLight}
+                    />
+                  </View>
+
+                  <View style={styles.inputGroup}>
+                    <Text style={styles.inputLabel}>ALT (U/L)</Text>
+                    <TextInput
+                      style={styles.input}
+                      value={editAlt}
+                      onChangeText={setEditAlt}
+                      keyboardType="numeric"
+                      placeholder="e.g., 25"
+                      placeholderTextColor={colors.textLight}
+                    />
+                  </View>
+
+                  <View style={styles.inputGroup}>
+                    <Text style={styles.inputLabel}>AST (U/L)</Text>
+                    <TextInput
+                      style={styles.input}
+                      value={editAst}
+                      onChangeText={setEditAst}
+                      keyboardType="numeric"
+                      placeholder="e.g., 30"
+                      placeholderTextColor={colors.textLight}
+                    />
+                  </View>
+
+                  <View style={styles.inputGroup}>
+                    <Text style={styles.inputLabel}>INR</Text>
+                    <TextInput
+                      style={styles.input}
+                      value={editInr}
+                      onChangeText={setEditInr}
+                      keyboardType="decimal-pad"
+                      placeholder="e.g., 1.0"
+                      placeholderTextColor={colors.textLight}
+                    />
+                  </View>
+
+                  <View style={styles.inputGroup}>
+                    <Text style={styles.inputLabel}>Notes (optional)</Text>
+                    <TextInput
+                      style={[styles.input, styles.textArea]}
+                      value={editLabNotes}
+                      onChangeText={setEditLabNotes}
+                      placeholder="Additional notes"
+                      placeholderTextColor={colors.textLight}
+                      multiline
+                      numberOfLines={3}
                     />
                   </View>
                 </>
@@ -816,7 +1176,21 @@ const styles = StyleSheet.create({
     color: colors.text,
     letterSpacing: -0.2,
   },
-  editButton: {
+  countBadge: {
+    backgroundColor: colors.primary,
+    borderRadius: borderRadius.full,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 2,
+    marginLeft: spacing.sm,
+    minWidth: 24,
+    alignItems: 'center',
+  },
+  countText: {
+    fontSize: typography.tiny,
+    fontWeight: typography.bold,
+    color: '#FFFFFF',
+  },
+  addButton: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.xs,
@@ -825,10 +1199,76 @@ const styles = StyleSheet.create({
     borderRadius: borderRadius.sm,
     backgroundColor: colors.borderLight,
   },
-  editButtonText: {
+  addButtonText: {
     fontSize: typography.caption,
     fontWeight: typography.semibold,
     color: colors.primary,
+  },
+  emptyState: {
+    backgroundColor: colors.card,
+    borderRadius: borderRadius.lg,
+    padding: spacing.xxl,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderStyle: 'dashed',
+  },
+  emptyStateText: {
+    fontSize: typography.body,
+    fontWeight: typography.semibold,
+    color: colors.textSecondary,
+    marginBottom: spacing.xs,
+  },
+  emptyStateSubtext: {
+    fontSize: typography.caption,
+    fontWeight: typography.regular,
+    color: colors.textLight,
+  },
+  entriesList: {
+    gap: spacing.md,
+  },
+  entryCard: {
+    backgroundColor: colors.card,
+    borderRadius: borderRadius.lg,
+    padding: spacing.lg,
+    borderWidth: 1,
+    borderColor: colors.border,
+    ...shadows.sm,
+  },
+  entryHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: spacing.md,
+  },
+  entryTimestamp: {
+    fontSize: typography.caption,
+    fontWeight: typography.semibold,
+    color: colors.textSecondary,
+  },
+  entryValues: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing.md,
+  },
+  entryValue: {
+    fontSize: typography.bodySmall,
+    fontWeight: typography.medium,
+    color: colors.text,
+    backgroundColor: colors.backgroundAlt,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs,
+    borderRadius: borderRadius.sm,
+  },
+  entryNotes: {
+    fontSize: typography.caption,
+    fontWeight: typography.regular,
+    color: colors.textSecondary,
+    marginTop: spacing.md,
+    paddingTop: spacing.md,
+    borderTopWidth: 1,
+    borderTopColor: colors.borderLight,
+    lineHeight: 18,
   },
   alertCard: {
     borderRadius: borderRadius.lg,
@@ -879,35 +1319,6 @@ const styles = StyleSheet.create({
     fontWeight: typography.regular,
     color: colors.textSecondary,
     lineHeight: 18,
-  },
-  dataGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    marginHorizontal: -spacing.xs,
-  },
-  dataCard: {
-    width: '50%',
-    paddingHorizontal: spacing.xs,
-    marginBottom: spacing.lg,
-  },
-  dataLabel: {
-    fontSize: typography.caption,
-    fontWeight: typography.medium,
-    color: colors.textSecondary,
-    marginBottom: spacing.sm,
-  },
-  dataValue: {
-    fontSize: 32,
-    fontWeight: typography.bold,
-    color: colors.text,
-    marginBottom: 2,
-    letterSpacing: -0.5,
-    lineHeight: 38,
-  },
-  dataUnit: {
-    fontSize: typography.tiny,
-    fontWeight: typography.regular,
-    color: colors.textLight,
   },
   trendCard: {
     backgroundColor: colors.card,
@@ -1022,6 +1433,11 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.md,
     fontSize: typography.body,
     color: colors.text,
+  },
+  textArea: {
+    minHeight: 80,
+    paddingTop: spacing.md,
+    textAlignVertical: 'top',
   },
   modalActions: {
     flexDirection: 'row',
