@@ -1,11 +1,14 @@
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Patient, VitalEntry, LabEntry } from '@/types/patient';
+import { migrateLabEntryToCanadian } from './canadianUnits';
+import { calculateAutoStatus } from './autoStatus';
 
 // CRITICAL: Single source of truth for patient storage
 // All screens MUST use this exact key
 const PATIENTS_KEY = 'opmgmt_patients_v1';
 const MIGRATION_FLAG_KEY = '@opmgmt_migrated';
+const CANADIAN_UNITS_MIGRATION_FLAG = '@opmgmt_canadian_units_migrated';
 
 /**
  * Local storage service for patient data
@@ -25,6 +28,7 @@ function generateId(): string {
  * Get all patients from local storage
  * Returns empty array if no patients exist
  * Automatically migrates patients to include vitalEntries and labEntries arrays
+ * Automatically migrates lab values from US units to Canadian units
  */
 export async function getAllPatients(): Promise<Patient[]> {
   try {
@@ -156,6 +160,9 @@ export async function createPatient(patientData: Omit<Patient, 'id' | 'userId' |
       labs: patientData.labs || [],
       vitalEntries: patientData.vitalEntries || [],
       labEntries: patientData.labEntries || [],
+      // Initialize status mode to auto
+      statusMode: 'auto',
+      computedStatus: 'green',
     };
     
     console.log('[LocalStorage] New patient object created with ID:', newPatient.id, 'Name:', newPatient.name);
@@ -193,6 +200,7 @@ export async function createPatient(patientData: Omit<Patient, 'id' | 'userId' |
 /**
  * Update an existing patient
  * ALL fields are updated - no partial saves
+ * Automatically recalculates auto-status after update
  */
 export async function updatePatient(id: string, patientData: Partial<Patient>): Promise<Patient> {
   try {
@@ -219,6 +227,16 @@ export async function updatePatient(id: string, patientData: Partial<Patient>): 
       userId: 'local-user', // Ensure userId stays consistent
       updatedAt: new Date(), // Update timestamp
     };
+    
+    // Recalculate auto-status
+    const autoStatusResult = calculateAutoStatus(updatedPatient);
+    updatedPatient.computedStatus = autoStatusResult.status;
+    
+    // If in auto mode, update alertStatus
+    if (updatedPatient.statusMode !== 'manual') {
+      updatedPatient.alertStatus = autoStatusResult.status;
+      console.log('[LocalStorage] Auto-status updated to:', autoStatusResult.status);
+    }
     
     console.log('[LocalStorage] Updated patient name:', updatedPatient.name);
     console.log('[LocalStorage] Updated patient has', updatedPatient.vitalEntries?.length || 0, 'vital entries and', updatedPatient.labEntries?.length || 0, 'lab entries');
@@ -248,6 +266,7 @@ export async function updatePatient(id: string, patientData: Partial<Patient>): 
 /**
  * Add a vital entry to a patient
  * Generates unique ID and appends to vitalEntries array
+ * Automatically recalculates auto-status
  */
 export async function addVitalEntry(patientId: string, vitalEntry: Omit<VitalEntry, 'id'>): Promise<Patient> {
   try {
@@ -298,6 +317,8 @@ export async function addVitalEntry(patientId: string, vitalEntry: Omit<VitalEnt
 /**
  * Add a lab entry to a patient
  * Generates unique ID and appends to labEntries array
+ * Automatically converts US units to Canadian units if detected
+ * Automatically recalculates auto-status
  */
 export async function addLabEntry(patientId: string, labEntry: Omit<LabEntry, 'id'>): Promise<Patient> {
   try {
@@ -316,14 +337,17 @@ export async function addLabEntry(patientId: string, labEntry: Omit<LabEntry, 'i
     console.log('[LocalStorage] Found patient:', patient.name);
     console.log('[LocalStorage] Current lab entries count:', patient.labEntries?.length || 0);
     
+    // Migrate to Canadian units if needed
+    const migratedLabEntry = migrateLabEntryToCanadian(labEntry);
+    
     // Generate unique ID for the lab entry
     const newLabEntry: LabEntry = {
-      ...labEntry,
+      ...migratedLabEntry,
       id: generateId(),
     };
     
     console.log('[LocalStorage] Generated lab entry ID:', newLabEntry.id);
-    console.log('[LocalStorage] Lab entry data:', JSON.stringify(newLabEntry));
+    console.log('[LocalStorage] Lab entry data (Canadian units):', JSON.stringify(newLabEntry));
     
     // Append to labEntries array
     const updatedLabEntries = [...(patient.labEntries || []), newLabEntry];
@@ -347,6 +371,7 @@ export async function addLabEntry(patientId: string, labEntry: Omit<LabEntry, 'i
 
 /**
  * Delete a vital entry from a patient
+ * Automatically recalculates auto-status
  */
 export async function deleteVitalEntry(patientId: string, vitalEntryId: string): Promise<Patient> {
   try {
@@ -371,6 +396,7 @@ export async function deleteVitalEntry(patientId: string, vitalEntryId: string):
 
 /**
  * Delete a lab entry from a patient
+ * Automatically recalculates auto-status
  */
 export async function deleteLabEntry(patientId: string, labEntryId: string): Promise<Patient> {
   try {
@@ -456,64 +482,109 @@ export async function migrateExistingData(): Promise<void> {
     const migrated = await AsyncStorage.getItem(MIGRATION_FLAG_KEY);
     if (migrated === 'true') {
       console.log('[LocalStorage] Migration already completed, skipping');
-      return;
-    }
-    
-    console.log('[LocalStorage] Running one-time data migration');
-    
-    // Check for old storage key
-    const oldKey = '@opmgmt_patients';
-    const oldData = await AsyncStorage.getItem(oldKey);
-    
-    if (oldData) {
-      console.log('[LocalStorage] Found old patient data, migrating to new key');
-      const oldPatients = JSON.parse(oldData);
-      console.log('[LocalStorage] Migrating', oldPatients.length, 'patients from old storage');
+    } else {
+      console.log('[LocalStorage] Running one-time data migration');
       
-      // Migrate each patient to include vitalEntries and labEntries
-      const migratedPatients = oldPatients.map((patient: any) => ({
-        ...patient,
-        vitals: patient.vitals || [],
-        labs: patient.labs || [],
-        vitalEntries: patient.vitalEntries || [],
-        labEntries: patient.labEntries || [],
-      }));
+      // Check for old storage key
+      const oldKey = '@opmgmt_patients';
+      const oldData = await AsyncStorage.getItem(oldKey);
       
-      // Save to new key
-      await AsyncStorage.setItem(PATIENTS_KEY, JSON.stringify(migratedPatients));
-      console.log('[LocalStorage] Migration complete, removing old key');
-      
-      // Remove old key
-      await AsyncStorage.removeItem(oldKey);
-    }
-    
-    // Check if there's any existing patient data in the new format
-    const existingPatients = await getAllPatients();
-    console.log('[LocalStorage] After migration, found', existingPatients.length, 'patients in new storage');
-    
-    // Ensure all patients have vitalEntries and labEntries arrays
-    let needsSave = false;
-    const updatedPatients = existingPatients.map(patient => {
-      if (!patient.vitalEntries || !patient.labEntries) {
-        needsSave = true;
-        return {
+      if (oldData) {
+        console.log('[LocalStorage] Found old patient data, migrating to new key');
+        const oldPatients = JSON.parse(oldData);
+        console.log('[LocalStorage] Migrating', oldPatients.length, 'patients from old storage');
+        
+        // Migrate each patient to include vitalEntries and labEntries
+        const migratedPatients = oldPatients.map((patient: any) => ({
           ...patient,
           vitals: patient.vitals || [],
           labs: patient.labs || [],
           vitalEntries: patient.vitalEntries || [],
           labEntries: patient.labEntries || [],
-        };
+        }));
+        
+        // Save to new key
+        await AsyncStorage.setItem(PATIENTS_KEY, JSON.stringify(migratedPatients));
+        console.log('[LocalStorage] Migration complete, removing old key');
+        
+        // Remove old key
+        await AsyncStorage.removeItem(oldKey);
       }
-      return patient;
-    });
-    
-    if (needsSave) {
-      console.log('[LocalStorage] Migrating patients to include vitalEntries and labEntries arrays');
-      await saveAllPatients(updatedPatients);
+      
+      // Check if there's any existing patient data in the new format
+      const existingPatients = await getAllPatients();
+      console.log('[LocalStorage] After migration, found', existingPatients.length, 'patients in new storage');
+      
+      // Ensure all patients have vitalEntries and labEntries arrays
+      let needsSave = false;
+      const updatedPatients = existingPatients.map(patient => {
+        if (!patient.vitalEntries || !patient.labEntries) {
+          needsSave = true;
+          return {
+            ...patient,
+            vitals: patient.vitals || [],
+            labs: patient.labs || [],
+            vitalEntries: patient.vitalEntries || [],
+            labEntries: patient.labEntries || [],
+          };
+        }
+        return patient;
+      });
+      
+      if (needsSave) {
+        console.log('[LocalStorage] Migrating patients to include vitalEntries and labEntries arrays');
+        await saveAllPatients(updatedPatients);
+      }
+      
+      await AsyncStorage.setItem(MIGRATION_FLAG_KEY, 'true');
+      console.log('[LocalStorage] Migration complete');
     }
     
-    await AsyncStorage.setItem(MIGRATION_FLAG_KEY, 'true');
-    console.log('[LocalStorage] Migration complete');
+    // Check if Canadian units migration already ran
+    const canadianMigrated = await AsyncStorage.getItem(CANADIAN_UNITS_MIGRATION_FLAG);
+    if (canadianMigrated === 'true') {
+      console.log('[LocalStorage] Canadian units migration already completed, skipping');
+      return;
+    }
+    
+    console.log('[LocalStorage] ========== CANADIAN UNITS MIGRATION START ==========');
+    console.log('[LocalStorage] Migrating existing lab values from US units to Canadian units');
+    
+    const patients = await getAllPatients();
+    let migrationCount = 0;
+    
+    const migratedPatients = patients.map(patient => {
+      let patientMigrated = false;
+      
+      // Migrate lab entries
+      const migratedLabEntries = (patient.labEntries || []).map(labEntry => {
+        const migrated = migrateLabEntryToCanadian(labEntry);
+        if (JSON.stringify(migrated) !== JSON.stringify(labEntry)) {
+          patientMigrated = true;
+        }
+        return migrated;
+      });
+      
+      if (patientMigrated) {
+        migrationCount++;
+        console.log('[LocalStorage] Migrated lab values for patient:', patient.name);
+      }
+      
+      return {
+        ...patient,
+        labEntries: migratedLabEntries,
+      };
+    });
+    
+    if (migrationCount > 0) {
+      console.log('[LocalStorage] Migrated', migrationCount, 'patients to Canadian units');
+      await saveAllPatients(migratedPatients);
+    } else {
+      console.log('[LocalStorage] No patients needed Canadian units migration');
+    }
+    
+    await AsyncStorage.setItem(CANADIAN_UNITS_MIGRATION_FLAG, 'true');
+    console.log('[LocalStorage] ========== CANADIAN UNITS MIGRATION END ==========');
   } catch (error) {
     console.error('[LocalStorage] Error during migration:', error);
     // Don't throw - migration failure shouldn't break the app

@@ -20,6 +20,8 @@ import { IconSymbol } from '@/components/IconSymbol';
 import { Patient, Alert as PatientAlert, AlertStatus, TrendData, VitalEntry, LabEntry } from '@/types/patient';
 import { calculateTrends, generateAlerts, calculateAlertStatus } from '@/utils/alertLogic';
 import { getPatientById, addVitalEntry, addLabEntry, deleteVitalEntry, deleteLabEntry } from '@/utils/localStorage';
+import { CANADIAN_LAB_RANGES, CANADIAN_VITAL_RANGES, checkVitalAbnormalities, checkLabAbnormalities } from '@/utils/canadianUnits';
+import { calculateAutoStatus } from '@/utils/autoStatus';
 
 export default function PatientDetailScreen({ route, navigation }: any) {
   console.log('[PatientDetail] Component rendered');
@@ -107,15 +109,17 @@ export default function PatientDetailScreen({ route, navigation }: any) {
     const patientAlerts = generateAlerts(updatedPatient);
     setAlerts(patientAlerts);
     
-    const computedStatus = calculateAlertStatus(updatedPatient);
-    updatedPatient.computedStatus = computedStatus;
+    // Calculate auto-status based on Canadian reference ranges
+    const autoStatusResult = calculateAutoStatus(updatedPatient);
+    updatedPatient.computedStatus = autoStatusResult.status;
     
     if (updatedPatient.statusMode === 'manual' && updatedPatient.manualStatus) {
       console.log('[PatientDetail] Manual status override active - using manual status:', updatedPatient.manualStatus);
       updatedPatient.alertStatus = updatedPatient.manualStatus;
     } else {
-      console.log('[PatientDetail] Auto status mode - using computed status:', computedStatus);
-      updatedPatient.alertStatus = computedStatus;
+      console.log('[PatientDetail] Auto status mode - using computed status:', autoStatusResult.status);
+      console.log('[PatientDetail] Auto-status summary:', autoStatusResult.summary);
+      updatedPatient.alertStatus = autoStatusResult.status;
     }
   };
 
@@ -410,29 +414,69 @@ export default function PatientDetailScreen({ route, navigation }: any) {
   const renderVitalEntry = ({ item }: { item: VitalEntry }) => {
     const timestampText = formatTimestamp(new Date(item.timestamp));
     
+    // Check for abnormalities
+    const abnormalities = checkVitalAbnormalities(item);
+    const abnormalFields = new Set(abnormalities.map(a => a.field));
+    
     const primaryValues = [];
     if (item.hr) {
-      primaryValues.push({ label: 'HR', value: `${item.hr}`, unit: 'bpm' });
+      primaryValues.push({ 
+        label: 'HR', 
+        value: `${item.hr}`, 
+        unit: 'bpm',
+        isAbnormal: abnormalFields.has('hr'),
+      });
     }
     if (item.bpSys && item.bpDia) {
-      primaryValues.push({ label: 'BP', value: `${item.bpSys}/${item.bpDia}`, unit: 'mmHg' });
+      const bpAbnormal = abnormalFields.has('bpSys') || abnormalFields.has('bpDia');
+      primaryValues.push({ 
+        label: 'BP', 
+        value: `${item.bpSys}/${item.bpDia}`, 
+        unit: 'mmHg',
+        isAbnormal: bpAbnormal,
+      });
     }
     if (item.temp) {
-      primaryValues.push({ label: 'Temp', value: `${item.temp.toFixed(1)}`, unit: '°C' });
+      primaryValues.push({ 
+        label: 'Temp', 
+        value: `${item.temp.toFixed(1)}`, 
+        unit: '°C',
+        isAbnormal: abnormalFields.has('temp'),
+      });
     }
     
     const secondaryValues = [];
     if (item.rr) {
-      secondaryValues.push({ label: 'RR', value: `${item.rr}`, unit: '/min' });
+      secondaryValues.push({ 
+        label: 'RR', 
+        value: `${item.rr}`, 
+        unit: '/min',
+        isAbnormal: abnormalFields.has('rr'),
+      });
     }
     if (item.spo2) {
-      secondaryValues.push({ label: 'SpO₂', value: `${item.spo2}`, unit: '%' });
+      secondaryValues.push({ 
+        label: 'SpO₂', 
+        value: `${item.spo2}`, 
+        unit: '%',
+        isAbnormal: abnormalFields.has('spo2'),
+      });
     }
     if (item.urineOutput) {
-      secondaryValues.push({ label: 'UO', value: `${item.urineOutput}`, unit: 'ml/hr' });
+      secondaryValues.push({ 
+        label: 'UO', 
+        value: `${item.urineOutput}`, 
+        unit: 'ml/hr',
+        isAbnormal: abnormalFields.has('urineOutput'),
+      });
     }
     if (item.pain !== undefined) {
-      secondaryValues.push({ label: 'Pain', value: `${item.pain}`, unit: '/10' });
+      secondaryValues.push({ 
+        label: 'Pain', 
+        value: `${item.pain}`, 
+        unit: '/10',
+        isAbnormal: false, // Pain is subjective, not flagged as abnormal
+      });
     }
 
     return (
@@ -456,10 +500,26 @@ export default function PatientDetailScreen({ route, navigation }: any) {
         {primaryValues.length > 0 && (
           <View style={styles.primaryValuesGrid}>
             {primaryValues.map((val, idx) => (
-              <View key={idx} style={styles.primaryValueItem}>
-                <Text style={styles.primaryValueLabel}>{val.label}</Text>
+              <View key={idx} style={[
+                styles.primaryValueItem,
+                val.isAbnormal && styles.abnormalValueItem,
+              ]}>
+                <View style={styles.primaryValueLabelRow}>
+                  <Text style={styles.primaryValueLabel}>{val.label}</Text>
+                  {val.isAbnormal && (
+                    <IconSymbol
+                      ios_icon_name="exclamationmark.triangle.fill"
+                      android_material_icon_name="warning"
+                      size={12}
+                      color={colors.alertRed}
+                    />
+                  )}
+                </View>
                 <View style={styles.primaryValueRow}>
-                  <Text style={styles.primaryValueText}>{val.value}</Text>
+                  <Text style={[
+                    styles.primaryValueText,
+                    val.isAbnormal && styles.abnormalValueText,
+                  ]}>{val.value}</Text>
                   <Text style={styles.primaryValueUnit}>{val.unit}</Text>
                 </View>
               </View>
@@ -470,14 +530,44 @@ export default function PatientDetailScreen({ route, navigation }: any) {
         {secondaryValues.length > 0 && (
           <View style={styles.secondaryValuesGrid}>
             {secondaryValues.map((val, idx) => (
-              <View key={idx} style={styles.secondaryValueItem}>
-                <Text style={styles.secondaryValueLabel}>{val.label}</Text>
-                <Text style={styles.secondaryValueText}>
+              <View key={idx} style={[
+                styles.secondaryValueItem,
+                val.isAbnormal && styles.abnormalValueItem,
+              ]}>
+                <View style={styles.secondaryValueLabelRow}>
+                  <Text style={styles.secondaryValueLabel}>{val.label}</Text>
+                  {val.isAbnormal && (
+                    <IconSymbol
+                      ios_icon_name="exclamationmark.triangle.fill"
+                      android_material_icon_name="warning"
+                      size={10}
+                      color={colors.alertRed}
+                    />
+                  )}
+                </View>
+                <Text style={[
+                  styles.secondaryValueText,
+                  val.isAbnormal && styles.abnormalValueText,
+                ]}>
                   {val.value}
                   <Text style={styles.secondaryValueUnit}> {val.unit}</Text>
                 </Text>
               </View>
             ))}
+          </View>
+        )}
+
+        {abnormalities.length > 0 && (
+          <View style={styles.abnormalSummary}>
+            <IconSymbol
+              ios_icon_name="exclamationmark.triangle.fill"
+              android_material_icon_name="warning"
+              size={14}
+              color={colors.alertRed}
+            />
+            <Text style={styles.abnormalSummaryText}>
+              {abnormalities.length} {abnormalities.length === 1 ? 'value' : 'values'} out of range
+            </Text>
           </View>
         )}
 
@@ -493,41 +583,100 @@ export default function PatientDetailScreen({ route, navigation }: any) {
   const renderLabEntry = ({ item }: { item: LabEntry }) => {
     const timestampText = formatTimestamp(new Date(item.timestamp));
     
+    // Check for abnormalities
+    const abnormalities = checkLabAbnormalities(item);
+    const abnormalFields = new Set(abnormalities.map(a => a.field));
+    
     const primaryValues = [];
     if (item.wbc) {
-      primaryValues.push({ label: 'WBC', value: item.wbc.toFixed(1), unit: 'K/μL' });
+      primaryValues.push({ 
+        label: 'WBC', 
+        value: item.wbc.toFixed(1), 
+        unit: 'x10⁹/L',
+        isAbnormal: abnormalFields.has('wbc'),
+      });
     }
     if (item.hb) {
-      primaryValues.push({ label: 'Hb', value: item.hb.toFixed(1), unit: 'g/dL' });
+      primaryValues.push({ 
+        label: 'Hb', 
+        value: Math.round(item.hb).toString(), 
+        unit: 'g/L',
+        isAbnormal: abnormalFields.has('hb'),
+      });
     }
     if (item.cr) {
-      primaryValues.push({ label: 'Cr', value: item.cr.toFixed(1), unit: 'mg/dL' });
+      primaryValues.push({ 
+        label: 'Cr', 
+        value: Math.round(item.cr).toString(), 
+        unit: 'µmol/L',
+        isAbnormal: abnormalFields.has('cr'),
+      });
     }
     if (item.lactate) {
-      primaryValues.push({ label: 'Lactate', value: item.lactate.toFixed(1), unit: 'mmol/L' });
+      primaryValues.push({ 
+        label: 'Lactate', 
+        value: item.lactate.toFixed(1), 
+        unit: 'mmol/L',
+        isAbnormal: abnormalFields.has('lactate'),
+      });
     }
     
     const secondaryValues = [];
     if (item.na) {
-      secondaryValues.push({ label: 'Na', value: `${item.na}`, unit: 'mEq/L' });
+      secondaryValues.push({ 
+        label: 'Na', 
+        value: `${item.na}`, 
+        unit: 'mmol/L',
+        isAbnormal: abnormalFields.has('na'),
+      });
     }
     if (item.k) {
-      secondaryValues.push({ label: 'K', value: item.k.toFixed(1), unit: 'mEq/L' });
+      secondaryValues.push({ 
+        label: 'K', 
+        value: item.k.toFixed(1), 
+        unit: 'mmol/L',
+        isAbnormal: abnormalFields.has('k'),
+      });
     }
     if (item.plt) {
-      secondaryValues.push({ label: 'Plt', value: `${item.plt}`, unit: 'K/μL' });
+      secondaryValues.push({ 
+        label: 'Plt', 
+        value: `${item.plt}`, 
+        unit: 'x10⁹/L',
+        isAbnormal: abnormalFields.has('plt'),
+      });
     }
     if (item.inr) {
-      secondaryValues.push({ label: 'INR', value: item.inr.toFixed(2), unit: '' });
+      secondaryValues.push({ 
+        label: 'INR', 
+        value: item.inr.toFixed(2), 
+        unit: '',
+        isAbnormal: abnormalFields.has('inr'),
+      });
     }
     if (item.bili) {
-      secondaryValues.push({ label: 'Bili', value: item.bili.toFixed(1), unit: 'mg/dL' });
+      secondaryValues.push({ 
+        label: 'Bili', 
+        value: Math.round(item.bili).toString(), 
+        unit: 'µmol/L',
+        isAbnormal: abnormalFields.has('bili'),
+      });
     }
     if (item.alt) {
-      secondaryValues.push({ label: 'ALT', value: `${item.alt}`, unit: 'U/L' });
+      secondaryValues.push({ 
+        label: 'ALT', 
+        value: `${item.alt}`, 
+        unit: 'U/L',
+        isAbnormal: abnormalFields.has('alt'),
+      });
     }
     if (item.ast) {
-      secondaryValues.push({ label: 'AST', value: `${item.ast}`, unit: 'U/L' });
+      secondaryValues.push({ 
+        label: 'AST', 
+        value: `${item.ast}`, 
+        unit: 'U/L',
+        isAbnormal: abnormalFields.has('ast'),
+      });
     }
 
     return (
@@ -551,10 +700,26 @@ export default function PatientDetailScreen({ route, navigation }: any) {
         {primaryValues.length > 0 && (
           <View style={styles.primaryValuesGrid}>
             {primaryValues.map((val, idx) => (
-              <View key={idx} style={styles.primaryValueItem}>
-                <Text style={styles.primaryValueLabel}>{val.label}</Text>
+              <View key={idx} style={[
+                styles.primaryValueItem,
+                val.isAbnormal && styles.abnormalValueItem,
+              ]}>
+                <View style={styles.primaryValueLabelRow}>
+                  <Text style={styles.primaryValueLabel}>{val.label}</Text>
+                  {val.isAbnormal && (
+                    <IconSymbol
+                      ios_icon_name="exclamationmark.triangle.fill"
+                      android_material_icon_name="warning"
+                      size={12}
+                      color={colors.alertRed}
+                    />
+                  )}
+                </View>
                 <View style={styles.primaryValueRow}>
-                  <Text style={styles.primaryValueText}>{val.value}</Text>
+                  <Text style={[
+                    styles.primaryValueText,
+                    val.isAbnormal && styles.abnormalValueText,
+                  ]}>{val.value}</Text>
                   {val.unit && <Text style={styles.primaryValueUnit}>{val.unit}</Text>}
                 </View>
               </View>
@@ -565,14 +730,44 @@ export default function PatientDetailScreen({ route, navigation }: any) {
         {secondaryValues.length > 0 && (
           <View style={styles.secondaryValuesGrid}>
             {secondaryValues.map((val, idx) => (
-              <View key={idx} style={styles.secondaryValueItem}>
-                <Text style={styles.secondaryValueLabel}>{val.label}</Text>
-                <Text style={styles.secondaryValueText}>
+              <View key={idx} style={[
+                styles.secondaryValueItem,
+                val.isAbnormal && styles.abnormalValueItem,
+              ]}>
+                <View style={styles.secondaryValueLabelRow}>
+                  <Text style={styles.secondaryValueLabel}>{val.label}</Text>
+                  {val.isAbnormal && (
+                    <IconSymbol
+                      ios_icon_name="exclamationmark.triangle.fill"
+                      android_material_icon_name="warning"
+                      size={10}
+                      color={colors.alertRed}
+                    />
+                  )}
+                </View>
+                <Text style={[
+                  styles.secondaryValueText,
+                  val.isAbnormal && styles.abnormalValueText,
+                ]}>
                   {val.value}
                   {val.unit && <Text style={styles.secondaryValueUnit}> {val.unit}</Text>}
                 </Text>
               </View>
             ))}
+          </View>
+        )}
+
+        {abnormalities.length > 0 && (
+          <View style={styles.abnormalSummary}>
+            <IconSymbol
+              ios_icon_name="exclamationmark.triangle.fill"
+              android_material_icon_name="warning"
+              size={14}
+              color={colors.alertRed}
+            />
+            <Text style={styles.abnormalSummaryText}>
+              {abnormalities.length} {abnormalities.length === 1 ? 'value' : 'values'} out of range
+            </Text>
           </View>
         )}
 
@@ -608,6 +803,23 @@ export default function PatientDetailScreen({ route, navigation }: any) {
               </Text>
             </View>
           </View>
+          
+          {patient.statusMode !== 'manual' && patient.computedStatus && (
+            <View style={styles.autoStatusSummary}>
+              <IconSymbol
+                ios_icon_name="chart.bar.fill"
+                android_material_icon_name="assessment"
+                size={14}
+                color={colors.textSecondary}
+              />
+              <Text style={styles.autoStatusText}>
+                {(() => {
+                  const autoStatus = calculateAutoStatus(patient);
+                  return autoStatus.summary;
+                })()}
+              </Text>
+            </View>
+          )}
         </View>
 
         {alerts.length > 0 && (
@@ -1023,73 +1235,73 @@ export default function PatientDetailScreen({ route, navigation }: any) {
               ) : (
                 <>
                   <View style={styles.inputGroup}>
-                    <Text style={styles.inputLabel}>WBC (K/μL)</Text>
+                    <Text style={styles.inputLabel}>WBC (x10⁹/L)</Text>
                     <TextInput
                       style={styles.input}
                       value={editWbc}
                       onChangeText={setEditWbc}
                       keyboardType="decimal-pad"
-                      placeholder="e.g., 9.5"
+                      placeholder="e.g., 9.5 (normal: 4.0-11.0)"
                       placeholderTextColor={colors.textLight}
                     />
                   </View>
 
                   <View style={styles.inputGroup}>
-                    <Text style={styles.inputLabel}>Hemoglobin (g/dL)</Text>
+                    <Text style={styles.inputLabel}>Hemoglobin (g/L) - Canadian units</Text>
                     <TextInput
                       style={styles.input}
                       value={editHb}
                       onChangeText={setEditHb}
-                      keyboardType="decimal-pad"
-                      placeholder="e.g., 13.2"
+                      keyboardType="numeric"
+                      placeholder="e.g., 132 (normal: 120-160)"
                       placeholderTextColor={colors.textLight}
                     />
                   </View>
 
                   <View style={styles.inputGroup}>
-                    <Text style={styles.inputLabel}>Platelets (K/μL)</Text>
+                    <Text style={styles.inputLabel}>Platelets (x10⁹/L)</Text>
                     <TextInput
                       style={styles.input}
                       value={editPlt}
                       onChangeText={setEditPlt}
                       keyboardType="numeric"
-                      placeholder="e.g., 250"
+                      placeholder="e.g., 250 (normal: 150-400)"
                       placeholderTextColor={colors.textLight}
                     />
                   </View>
 
                   <View style={styles.inputGroup}>
-                    <Text style={styles.inputLabel}>Sodium (mEq/L)</Text>
+                    <Text style={styles.inputLabel}>Sodium (mmol/L)</Text>
                     <TextInput
                       style={styles.input}
                       value={editNa}
                       onChangeText={setEditNa}
                       keyboardType="numeric"
-                      placeholder="e.g., 140"
+                      placeholder="e.g., 140 (normal: 135-145)"
                       placeholderTextColor={colors.textLight}
                     />
                   </View>
 
                   <View style={styles.inputGroup}>
-                    <Text style={styles.inputLabel}>Potassium (mEq/L)</Text>
+                    <Text style={styles.inputLabel}>Potassium (mmol/L)</Text>
                     <TextInput
                       style={styles.input}
                       value={editK}
                       onChangeText={setEditK}
                       keyboardType="decimal-pad"
-                      placeholder="e.g., 4.2"
+                      placeholder="e.g., 4.2 (normal: 3.5-5.0)"
                       placeholderTextColor={colors.textLight}
                     />
                   </View>
 
                   <View style={styles.inputGroup}>
-                    <Text style={styles.inputLabel}>Creatinine (mg/dL)</Text>
+                    <Text style={styles.inputLabel}>Creatinine (µmol/L) - Canadian units</Text>
                     <TextInput
                       style={styles.input}
                       value={editCr}
                       onChangeText={setEditCr}
-                      keyboardType="decimal-pad"
-                      placeholder="e.g., 0.9"
+                      keyboardType="numeric"
+                      placeholder="e.g., 88 (normal: 60-110)"
                       placeholderTextColor={colors.textLight}
                     />
                   </View>
@@ -1101,19 +1313,19 @@ export default function PatientDetailScreen({ route, navigation }: any) {
                       value={editLactate}
                       onChangeText={setEditLactate}
                       keyboardType="decimal-pad"
-                      placeholder="e.g., 1.2"
+                      placeholder="e.g., 1.2 (normal: 0.5-2.0)"
                       placeholderTextColor={colors.textLight}
                     />
                   </View>
 
                   <View style={styles.inputGroup}>
-                    <Text style={styles.inputLabel}>Bilirubin (mg/dL)</Text>
+                    <Text style={styles.inputLabel}>Bilirubin (µmol/L) - Canadian units</Text>
                     <TextInput
                       style={styles.input}
                       value={editBili}
                       onChangeText={setEditBili}
-                      keyboardType="decimal-pad"
-                      placeholder="e.g., 0.8"
+                      keyboardType="numeric"
+                      placeholder="e.g., 17 (normal: 5-21)"
                       placeholderTextColor={colors.textLight}
                     />
                   </View>
@@ -1258,6 +1470,22 @@ const styles = StyleSheet.create({
     fontWeight: typography.bold,
     letterSpacing: 0.5,
   },
+  autoStatusSummary: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+    marginTop: spacing.md,
+    paddingTop: spacing.md,
+    borderTopWidth: 1,
+    borderTopColor: colors.borderLight,
+  },
+  autoStatusText: {
+    flex: 1,
+    fontSize: typography.caption,
+    fontWeight: typography.medium,
+    color: colors.textSecondary,
+    lineHeight: 18,
+  },
   section: {
     paddingHorizontal: spacing.xl,
     paddingTop: spacing.xxl,
@@ -1399,13 +1627,29 @@ const styles = StyleSheet.create({
   primaryValueItem: {
     minWidth: 80,
   },
+  abnormalValueItem: {
+    backgroundColor: colors.alertRedBg,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs,
+    borderRadius: borderRadius.sm,
+    borderWidth: 1,
+    borderColor: colors.alertRedBorder,
+  },
+  primaryValueLabelRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs - 2,
+    marginBottom: spacing.xs,
+  },
   primaryValueLabel: {
     fontSize: typography.caption,
     fontWeight: typography.medium,
     color: colors.textLight,
-    marginBottom: spacing.xs,
     textTransform: 'uppercase',
     letterSpacing: 0.5,
+  },
+  abnormalValueText: {
+    color: colors.alertRed,
   },
   primaryValueRow: {
     flexDirection: 'row',
@@ -1434,11 +1678,16 @@ const styles = StyleSheet.create({
   secondaryValueItem: {
     minWidth: 70,
   },
+  secondaryValueLabelRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs - 3,
+    marginBottom: 2,
+  },
   secondaryValueLabel: {
     fontSize: typography.tiny,
     fontWeight: typography.medium,
     color: colors.textLight,
-    marginBottom: 2,
     textTransform: 'uppercase',
     letterSpacing: 0.5,
   },
@@ -1451,6 +1700,20 @@ const styles = StyleSheet.create({
     fontSize: typography.tiny,
     fontWeight: typography.regular,
     color: colors.textLight,
+  },
+  abnormalSummary: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+    marginTop: spacing.md,
+    paddingTop: spacing.md,
+    borderTopWidth: 1,
+    borderTopColor: colors.alertRedBorder,
+  },
+  abnormalSummaryText: {
+    fontSize: typography.caption,
+    fontWeight: typography.semibold,
+    color: colors.alertRed,
   },
   notesContainer: {
     marginTop: spacing.md,

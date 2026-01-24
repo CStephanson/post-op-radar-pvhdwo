@@ -16,7 +16,8 @@ import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { colors, typography, spacing, borderRadius, shadows } from '@/styles/commonStyles';
 import { IconSymbol } from '@/components/IconSymbol';
 import { Patient, AlertStatus, SortOption } from '@/types/patient';
-import { getAllPatients, deletePatient } from '@/utils/localStorage';
+import { getAllPatients, deletePatient, updatePatient } from '@/utils/localStorage';
+import { calculateAutoStatus } from '@/utils/autoStatus';
 
 export default function HomeScreen() {
   console.log('[HomeScreen] Component rendered');
@@ -49,8 +50,27 @@ export default function HomeScreen() {
         return p;
       });
       
-      setPatients(patientsWithIds);
-      console.log('[HomeScreen] State updated with', patientsWithIds.length, 'patients');
+      // Recalculate auto-status for all patients
+      console.log('[HomeScreen] Recalculating auto-status for all patients');
+      const patientsWithAutoStatus = patientsWithIds.map(patient => {
+        const autoStatusResult = calculateAutoStatus(patient);
+        const updatedPatient = {
+          ...patient,
+          computedStatus: autoStatusResult.status,
+        };
+        
+        // If in auto mode, update alertStatus
+        if (updatedPatient.statusMode !== 'manual') {
+          updatedPatient.alertStatus = autoStatusResult.status;
+        }
+        
+        console.log('[HomeScreen] Patient:', patient.name, '| Auto-status:', autoStatusResult.status, '| Abnormalities:', autoStatusResult.abnormalCount);
+        
+        return updatedPatient;
+      });
+      
+      setPatients(patientsWithAutoStatus);
+      console.log('[HomeScreen] State updated with', patientsWithAutoStatus.length, 'patients');
       console.log('[HomeScreen] ========== LOAD PATIENTS END ==========');
     } catch (err: any) {
       console.error('[HomeScreen] Error loading patients:', err);
@@ -121,13 +141,6 @@ export default function HomeScreen() {
   const requestDeletePatient = (patient: Patient) => {
     console.log('[HomeScreen] ========== DELETE BUTTON PRESSED ==========');
     console.log('[HomeScreen] Delete pressed for patient:', patient.name, 'ID:', patient.id);
-    
-    // Show temporary toast/banner for debugging
-    Alert.alert(
-      'Debug',
-      `Delete pressed for: ${patient.name}`,
-      [{ text: 'OK' }]
-    );
     
     // Set patient to delete and show confirmation modal
     setPatientToDelete(patient);
@@ -321,7 +334,6 @@ export default function HomeScreen() {
           </View>
         </TouchableOpacity>
 
-        {/* Delete button - positioned absolutely on the right side */}
         <TouchableOpacity
           style={styles.deleteButton}
           onPress={() => requestDeletePatient(patient)}
@@ -341,7 +353,6 @@ export default function HomeScreen() {
   const sortedPatients = sortPatients(patients, sortBy);
   const currentSortLabel = getSortLabel(sortBy);
   const patientCountText = `${sortedPatients.length}`;
-  const debugLoadedText = `Loaded patients: ${sortedPatients.length}`;
 
   return (
     <SafeAreaView style={styles.safeArea} edges={['top']}>
@@ -357,12 +368,9 @@ export default function HomeScreen() {
                   size={10}
                   color={colors.textMuted}
                 />
-                <Text style={styles.disclaimerText}>Educational use only</Text>
+                <Text style={styles.disclaimerText}>Educational use only • Canadian units</Text>
               </View>
             </View>
-          </View>
-          <View style={styles.debugBadge}>
-            <Text style={styles.debugText}>{debugLoadedText}</Text>
           </View>
         </View>
 
@@ -463,7 +471,6 @@ export default function HomeScreen() {
           />
         )}
 
-        {/* Real Add Patient FAB - Bottom-right */}
         <Pressable
           onPress={handleAddPatient}
           style={({ pressed }) => [
@@ -480,7 +487,6 @@ export default function HomeScreen() {
           />
         </Pressable>
 
-        {/* Delete Confirmation Modal */}
         <Modal
           visible={deleteModalVisible}
           transparent={true}
@@ -577,19 +583,6 @@ const styles = StyleSheet.create({
     fontWeight: typography.medium,
     color: colors.textMuted,
     letterSpacing: 0.1,
-  },
-  debugBadge: {
-    paddingHorizontal: spacing.xl,
-    paddingVertical: spacing.xs,
-    backgroundColor: colors.primarySubtle,
-    borderTopWidth: 1,
-    borderTopColor: colors.borderLight,
-  },
-  debugText: {
-    fontSize: typography.caption,
-    fontWeight: typography.semibold,
-    color: colors.primary,
-    textAlign: 'center',
   },
   listHeader: {
     flexDirection: 'row',
