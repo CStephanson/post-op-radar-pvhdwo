@@ -12,7 +12,7 @@ import {
   Pressable,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useFocusEffect, useRouter } from 'expo-router';
+import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { colors, typography, spacing, borderRadius, shadows } from '@/styles/commonStyles';
 import { IconSymbol } from '@/components/IconSymbol';
 import { Patient, AlertStatus, SortOption } from '@/types/patient';
@@ -20,7 +20,7 @@ import { getAllPatients } from '@/utils/localStorage';
 
 export default function HomeScreen() {
   console.log('[HomeScreen] Component rendered');
-  const router = useRouter();
+  const navigation = useNavigation();
   const [patients, setPatients] = useState<Patient[]>([]);
   const [loading, setLoading] = useState(true);
   const [sortBy, setSortBy] = useState<SortOption>('status');
@@ -94,14 +94,14 @@ export default function HomeScreen() {
 
   const handlePatientPress = (patientId: string) => {
     console.log('[HomeScreen] User tapped patient card:', patientId);
-    router.push(`/patient/${patientId}`);
+    navigation.navigate('PatientDetail' as never, { id: patientId } as never);
   };
 
   const handleAddPatient = () => {
     console.log('[HomeScreen] ========== ADD PATIENT BUTTON PRESSED ==========');
     console.log('[HomeScreen] User tapped Add Patient button');
-    console.log('[HomeScreen] Navigating to AddPatient screen using Expo Router');
-    router.push('/add-patient');
+    console.log('[HomeScreen] Navigating to AddPatient screen using React Navigation');
+    navigation.navigate('AddPatient' as never);
   };
 
   const handleTestTap = () => {

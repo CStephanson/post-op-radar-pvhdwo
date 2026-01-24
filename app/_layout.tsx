@@ -19,7 +19,7 @@ import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { migrateExistingData } from "@/utils/localStorage";
 
 // Import screens
-import HomeScreen from "./(tabs)/(home)/index";
+import HomeScreen from "./home";
 import AddPatientScreen from "./add-patient";
 import PatientDetailScreen from "./patient/[id]";
 import PatientInfoScreen from "./patient-info/[id]";
@@ -137,13 +137,13 @@ export default function RootLayout() {
         <GestureHandlerRootView style={{ flex: 1 }}>
           <NavigationContainer theme={colorScheme === "dark" ? CustomDarkTheme : CustomDefaultTheme}>
             <Stack.Navigator
-              initialRouteName="Home"
+              initialRouteName="Dashboard"
               screenOptions={{
                 headerShown: false,
               }}
             >
               <Stack.Screen 
-                name="Home" 
+                name="Dashboard" 
                 component={HomeScreen}
                 options={{ headerShown: false }}
               />

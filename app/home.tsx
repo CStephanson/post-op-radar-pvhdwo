@@ -6,6 +6,7 @@ import {
   StyleSheet,
   ScrollView,
   TouchableOpacity,
+  Platform,
   ActivityIndicator,
   Alert,
   Pressable,
@@ -103,16 +104,6 @@ export default function HomeScreen() {
     navigation.navigate('AddPatient' as never);
   };
 
-  const handleTestTap = () => {
-    console.log('[HomeScreen] TEST TAP button pressed');
-    Alert.alert('Dashboard tap works', 'The TEST TAP button responded successfully!');
-  };
-
-  const handleTestFAB = () => {
-    console.log('[HomeScreen] TEST FAB button pressed');
-    Alert.alert('FAB tap works', 'The TEST FAB button responded successfully!');
-  };
-
   const getAlertColor = (status: AlertStatus) => {
     if (status === 'green') return colors.alertGreen;
     if (status === 'yellow') return colors.alertYellow;
@@ -190,17 +181,6 @@ export default function HomeScreen() {
           contentContainerStyle={styles.scrollContent}
           showsVerticalScrollIndicator={false}
         >
-          {/* TEMPORARY TEST TAP BUTTON - Full width at top of content */}
-          <Pressable
-            onPress={handleTestTap}
-            style={({ pressed }) => [
-              styles.testTapButton,
-              pressed && styles.testTapButtonPressed
-            ]}
-          >
-            <Text style={styles.testTapButtonText}>TEST TAP - Press to verify touch works</Text>
-          </Pressable>
-
           <View style={styles.listHeader}>
             <View style={styles.listHeaderLeft}>
               <Text style={styles.listTitle}>Patients</Text>
@@ -371,19 +351,7 @@ export default function HomeScreen() {
           <View style={styles.bottomSpacer} />
         </ScrollView>
 
-        {/* TEMPORARY TEST FAB - Top-left floating button */}
-        <Pressable
-          onPress={handleTestFAB}
-          style={({ pressed }) => [
-            styles.testFABButton,
-            pressed && styles.testFABButtonPressed
-          ]}
-          hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
-        >
-          <Text style={styles.testFABButtonText}>TEST FAB</Text>
-        </Pressable>
-
-        {/* Real Add Patient FAB - Bottom-right */}
+        {/* Add Patient FAB - Bottom-right */}
         <Pressable
           onPress={handleAddPatient}
           style={({ pressed }) => [
@@ -408,6 +376,7 @@ const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
     backgroundColor: colors.background,
+    paddingTop: Platform.OS === 'android' ? 48 : 0,
   },
   container: {
     flex: 1,
@@ -464,49 +433,6 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     paddingTop: spacing.xxl + spacing.sm,
-  },
-  testTapButton: {
-    backgroundColor: '#FF6B35',
-    marginHorizontal: spacing.xl,
-    marginBottom: spacing.lg,
-    paddingVertical: spacing.xl,
-    borderRadius: borderRadius.lg,
-    alignItems: 'center',
-    justifyContent: 'center',
-    ...shadows.lg,
-  },
-  testTapButtonPressed: {
-    opacity: 0.8,
-    transform: [{ scale: 0.98 }],
-  },
-  testTapButtonText: {
-    fontSize: typography.h3,
-    fontWeight: typography.bold,
-    color: '#FFFFFF',
-    textAlign: 'center',
-  },
-  testFABButton: {
-    position: 'absolute',
-    top: 24,
-    left: 24,
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.md,
-    borderRadius: borderRadius.lg,
-    backgroundColor: '#4ECDC4',
-    justifyContent: 'center',
-    alignItems: 'center',
-    zIndex: 9999,
-    elevation: 20,
-    ...shadows.lg,
-  },
-  testFABButtonPressed: {
-    opacity: 0.8,
-    transform: [{ scale: 0.95 }],
-  },
-  testFABButtonText: {
-    fontSize: typography.body,
-    fontWeight: typography.bold,
-    color: '#FFFFFF',
   },
   listHeader: {
     flexDirection: 'row',

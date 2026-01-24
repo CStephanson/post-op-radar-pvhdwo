@@ -13,14 +13,16 @@ import {
   KeyboardAvoidingView,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useNavigation } from '@react-navigation/native';
 import { colors, typography, spacing, borderRadius, shadows } from '@/styles/commonStyles';
 import { IconSymbol } from '@/components/IconSymbol';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { createPatient, getAllPatients } from '@/utils/localStorage';
 
-export default function AddPatientScreen({ navigation }: any) {
+export default function AddPatientScreen() {
   console.log('[AddPatient] AddPatientScreen rendered - Add Patient clicked');
   
+  const navigation = useNavigation();
   const [saving, setSaving] = useState(false);
   
   // Patient identification
@@ -138,8 +140,8 @@ export default function AddPatientScreen({ navigation }: any) {
       Alert.alert('Success', `Patient "${trimmedName}" added successfully!`);
       
       // Navigate back to dashboard - it will auto-refresh via useFocusEffect
-      console.log('[AddPatient] Navigating back to Home screen');
-      navigation.navigate('Home');
+      console.log('[AddPatient] Navigating back to Dashboard screen');
+      navigation.navigate('Dashboard' as never);
     } catch (error: any) {
       console.error('[AddPatient] ========== ADD PATIENT ERROR ==========');
       console.error('[AddPatient] Error creating patient:', error);
