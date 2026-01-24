@@ -11,6 +11,8 @@ import {
   Modal,
   KeyboardAvoidingView,
   Alert,
+  Pressable,
+  FlatList,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { colors, typography, spacing, borderRadius, shadows } from '@/styles/commonStyles';
@@ -29,6 +31,8 @@ export default function PatientDetailScreen({ route, navigation }: any) {
   const [trends, setTrends] = useState<TrendData[]>([]);
   const [editModalVisible, setEditModalVisible] = useState(false);
   const [editType, setEditType] = useState<'vitals' | 'labs'>('vitals');
+  const [deleteModalVisible, setDeleteModalVisible] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<{ type: 'vitals' | 'labs', id: string, timestamp: string } | null>(null);
   
   // Edit form state for vitals
   const [editHr, setEditHr] = useState('');
@@ -103,11 +107,9 @@ export default function PatientDetailScreen({ route, navigation }: any) {
     const patientAlerts = generateAlerts(updatedPatient);
     setAlerts(patientAlerts);
     
-    // Calculate the auto status
     const computedStatus = calculateAlertStatus(updatedPatient);
     updatedPatient.computedStatus = computedStatus;
     
-    // Respect manual status override - do NOT overwrite user-selected status
     if (updatedPatient.statusMode === 'manual' && updatedPatient.manualStatus) {
       console.log('[PatientDetail] Manual status override active - using manual status:', updatedPatient.manualStatus);
       updatedPatient.alertStatus = updatedPatient.manualStatus;
@@ -121,7 +123,6 @@ export default function PatientDetailScreen({ route, navigation }: any) {
     console.log('[PatientDetail] User tapped Add button for:', type);
     setEditType(type);
     
-    // Clear all form fields for new entry
     if (type === 'vitals') {
       setEditHr('');
       setEditBpSys('');
@@ -163,7 +164,6 @@ export default function PatientDetailScreen({ route, navigation }: any) {
     
     try {
       if (editType === 'vitals') {
-        // Validate: at least one vital value must be entered
         const hasValue = editHr || editBpSys || editBpDia || editRr || editTemp || editSpo2 || editUrineOutput || editPain;
         if (!hasValue) {
           console.log('[PatientDetail] Validation failed - no vital values entered');
@@ -173,7 +173,6 @@ export default function PatientDetailScreen({ route, navigation }: any) {
         
         console.log('[PatientDetail] Validation passed - creating vital entry');
         
-        // Create new vital entry
         const newVitalEntry: Omit<VitalEntry, 'id'> = {
           timestamp: new Date(),
           hr: editHr ? parseFloat(editHr) : undefined,
@@ -190,13 +189,11 @@ export default function PatientDetailScreen({ route, navigation }: any) {
         console.log('[PatientDetail] New vital entry to save:', JSON.stringify(newVitalEntry));
         console.log('[PatientDetail] Calling addVitalEntry for patient:', patient.id);
         
-        // Add vital entry to patient (this saves to storage)
         const updatedPatient = await addVitalEntry(patient.id, newVitalEntry);
         
         console.log('[PatientDetail] addVitalEntry returned successfully');
         console.log('[PatientDetail] Updated patient has', updatedPatient.vitalEntries?.length || 0, 'vital entries');
         
-        // Update local state
         setPatient(updatedPatient);
         updatePatientAnalysis(updatedPatient);
         
@@ -204,7 +201,6 @@ export default function PatientDetailScreen({ route, navigation }: any) {
         console.log('[PatientDetail]', successMessage);
         Alert.alert('Success', successMessage);
       } else {
-        // Validate: at least one lab value must be entered
         const hasValue = editWbc || editHb || editPlt || editNa || editK || editCr || editLactate || editBili || editAlt || editAst || editInr;
         if (!hasValue) {
           console.log('[PatientDetail] Validation failed - no lab values entered');
@@ -214,7 +210,6 @@ export default function PatientDetailScreen({ route, navigation }: any) {
         
         console.log('[PatientDetail] Validation passed - creating lab entry');
         
-        // Create new lab entry
         const newLabEntry: Omit<LabEntry, 'id'> = {
           timestamp: new Date(),
           wbc: editWbc ? parseFloat(editWbc) : undefined,
@@ -234,13 +229,11 @@ export default function PatientDetailScreen({ route, navigation }: any) {
         console.log('[PatientDetail] New lab entry to save:', JSON.stringify(newLabEntry));
         console.log('[PatientDetail] Calling addLabEntry for patient:', patient.id);
         
-        // Add lab entry to patient (this saves to storage)
         const updatedPatient = await addLabEntry(patient.id, newLabEntry);
         
         console.log('[PatientDetail] addLabEntry returned successfully');
         console.log('[PatientDetail] Updated patient has', updatedPatient.labEntries?.length || 0, 'lab entries');
         
-        // Update local state
         setPatient(updatedPatient);
         updatePatientAnalysis(updatedPatient);
         
@@ -263,66 +256,69 @@ export default function PatientDetailScreen({ route, navigation }: any) {
     }
   };
 
-  const handleDeleteVital = async (vitalId: string) => {
-    if (!patient) return;
-    
-    console.log('[PatientDetail] User requested to delete vital entry:', vitalId);
-    
-    Alert.alert(
-      'Delete Vital Entry',
-      'Are you sure you want to delete this vital signs entry?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              console.log('[PatientDetail] Deleting vital entry:', vitalId);
-              const updatedPatient = await deleteVitalEntry(patient.id, vitalId);
-              setPatient(updatedPatient);
-              updatePatientAnalysis(updatedPatient);
-              console.log('[PatientDetail] Vital entry deleted successfully');
-              Alert.alert('Success', 'Vital entry deleted');
-            } catch (error) {
-              console.error('[PatientDetail] Error deleting vital entry:', error);
-              Alert.alert('Error', 'Failed to delete vital entry');
-            }
-          },
-        },
-      ]
-    );
+  const confirmDeleteVital = (vitalId: string, timestamp: Date) => {
+    console.log('[PatientDetail] User tapped delete for vital entry:', vitalId);
+    const timestampText = formatTimestamp(timestamp);
+    setDeleteTarget({ type: 'vitals', id: vitalId, timestamp: timestampText });
+    setDeleteModalVisible(true);
   };
 
-  const handleDeleteLab = async (labId: string) => {
-    if (!patient) return;
+  const confirmDeleteLab = (labId: string, timestamp: Date) => {
+    console.log('[PatientDetail] User tapped delete for lab entry:', labId);
+    const timestampText = formatTimestamp(timestamp);
+    setDeleteTarget({ type: 'labs', id: labId, timestamp: timestampText });
+    setDeleteModalVisible(true);
+  };
+
+  const executeDelete = async () => {
+    if (!patient || !deleteTarget) {
+      return;
+    }
     
-    console.log('[PatientDetail] User requested to delete lab entry:', labId);
+    console.log('[PatientDetail] ========== DELETE ENTRY START ==========');
+    console.log('[PatientDetail] Deleting', deleteTarget.type, 'entry:', deleteTarget.id);
     
-    Alert.alert(
-      'Delete Lab Entry',
-      'Are you sure you want to delete this lab values entry?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              console.log('[PatientDetail] Deleting lab entry:', labId);
-              const updatedPatient = await deleteLabEntry(patient.id, labId);
-              setPatient(updatedPatient);
-              updatePatientAnalysis(updatedPatient);
-              console.log('[PatientDetail] Lab entry deleted successfully');
-              Alert.alert('Success', 'Lab entry deleted');
-            } catch (error) {
-              console.error('[PatientDetail] Error deleting lab entry:', error);
-              Alert.alert('Error', 'Failed to delete lab entry');
-            }
-          },
-        },
-      ]
-    );
+    try {
+      let updatedPatient: Patient;
+      
+      if (deleteTarget.type === 'vitals') {
+        console.log('[PatientDetail] Calling deleteVitalEntry for patient:', patient.id, 'entry:', deleteTarget.id);
+        updatedPatient = await deleteVitalEntry(patient.id, deleteTarget.id);
+        console.log('[PatientDetail] Vital entry deleted successfully');
+        console.log('[PatientDetail] Patient now has', updatedPatient.vitalEntries?.length || 0, 'vital entries');
+      } else {
+        console.log('[PatientDetail] Calling deleteLabEntry for patient:', patient.id, 'entry:', deleteTarget.id);
+        updatedPatient = await deleteLabEntry(patient.id, deleteTarget.id);
+        console.log('[PatientDetail] Lab entry deleted successfully');
+        console.log('[PatientDetail] Patient now has', updatedPatient.labEntries?.length || 0, 'lab entries');
+      }
+      
+      setPatient(updatedPatient);
+      updatePatientAnalysis(updatedPatient);
+      
+      setDeleteModalVisible(false);
+      setDeleteTarget(null);
+      
+      const entryType = deleteTarget.type === 'vitals' ? 'Vital entry' : 'Lab entry';
+      Alert.alert('Deleted', `${entryType} deleted successfully`);
+      
+      console.log('[PatientDetail] ========== DELETE ENTRY END ==========');
+    } catch (error: any) {
+      console.error('[PatientDetail] ========== DELETE ENTRY ERROR ==========');
+      console.error('[PatientDetail] Error deleting entry:', error);
+      console.error('[PatientDetail] Error message:', error.message);
+      
+      setDeleteModalVisible(false);
+      setDeleteTarget(null);
+      
+      Alert.alert('Error', 'Failed to delete entry. Please try again.');
+    }
+  };
+
+  const cancelDelete = () => {
+    console.log('[PatientDetail] User cancelled delete');
+    setDeleteModalVisible(false);
+    setDeleteTarget(null);
   };
 
   if (!patient) {
@@ -336,32 +332,52 @@ export default function PatientDetailScreen({ route, navigation }: any) {
   }
 
   const getAlertColor = (status: AlertStatus) => {
-    if (status === 'green') return colors.alertGreen;
-    if (status === 'yellow') return colors.alertYellow;
+    if (status === 'green') {
+      return colors.alertGreen;
+    }
+    if (status === 'yellow') {
+      return colors.alertYellow;
+    }
     return colors.alertRed;
   };
 
   const getAlertBgColor = (status: AlertStatus) => {
-    if (status === 'green') return colors.alertGreenBg;
-    if (status === 'yellow') return colors.alertYellowBg;
+    if (status === 'green') {
+      return colors.alertGreenBg;
+    }
+    if (status === 'yellow') {
+      return colors.alertYellowBg;
+    }
     return colors.alertRedBg;
   };
 
   const getAlertBorderColor = (status: AlertStatus) => {
-    if (status === 'green') return colors.alertGreenBorder;
-    if (status === 'yellow') return colors.alertYellowBorder;
+    if (status === 'green') {
+      return colors.alertGreenBorder;
+    }
+    if (status === 'yellow') {
+      return colors.alertYellowBorder;
+    }
     return colors.alertRedBorder;
   };
 
   const getTrendIcon = (trend: 'rising' | 'falling' | 'stable') => {
-    if (trend === 'rising') return 'arrow-upward';
-    if (trend === 'falling') return 'arrow-downward';
+    if (trend === 'rising') {
+      return 'arrow-upward';
+    }
+    if (trend === 'falling') {
+      return 'arrow-downward';
+    }
     return 'remove';
   };
 
   const getTrendColor = (trendData: TrendData) => {
-    if (trendData.concerning) return colors.alertRed;
-    if (trendData.trend === 'stable') return colors.textLight;
+    if (trendData.concerning) {
+      return colors.alertRed;
+    }
+    if (trendData.trend === 'stable') {
+      return colors.textLight;
+    }
     return colors.textSecondary;
   };
 
@@ -379,7 +395,6 @@ export default function PatientDetailScreen({ route, navigation }: any) {
   const alertBorderColor = getAlertBorderColor(patient.alertStatus);
   const podText = `Post-Operative Day ${patient.postOpDay}`;
 
-  // Sort entries by timestamp (most recent first)
   const sortedVitals = [...(patient.vitalEntries || [])].sort((a, b) => 
     new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
   );
@@ -392,6 +407,184 @@ export default function PatientDetailScreen({ route, navigation }: any) {
 
   console.log('[PatientDetail] Rendering with', sortedVitals.length, 'vitals and', sortedLabs.length, 'labs');
 
+  const renderVitalEntry = ({ item }: { item: VitalEntry }) => {
+    const timestampText = formatTimestamp(new Date(item.timestamp));
+    
+    const primaryValues = [];
+    if (item.hr) {
+      primaryValues.push({ label: 'HR', value: `${item.hr}`, unit: 'bpm' });
+    }
+    if (item.bpSys && item.bpDia) {
+      primaryValues.push({ label: 'BP', value: `${item.bpSys}/${item.bpDia}`, unit: 'mmHg' });
+    }
+    if (item.temp) {
+      primaryValues.push({ label: 'Temp', value: `${item.temp.toFixed(1)}`, unit: '°C' });
+    }
+    
+    const secondaryValues = [];
+    if (item.rr) {
+      secondaryValues.push({ label: 'RR', value: `${item.rr}`, unit: '/min' });
+    }
+    if (item.spo2) {
+      secondaryValues.push({ label: 'SpO₂', value: `${item.spo2}`, unit: '%' });
+    }
+    if (item.urineOutput) {
+      secondaryValues.push({ label: 'UO', value: `${item.urineOutput}`, unit: 'ml/hr' });
+    }
+    if (item.pain !== undefined) {
+      secondaryValues.push({ label: 'Pain', value: `${item.pain}`, unit: '/10' });
+    }
+
+    return (
+      <View style={styles.cleanEntryCard}>
+        <View style={styles.cleanEntryHeader}>
+          <Text style={styles.cleanTimestamp}>{timestampText}</Text>
+          <Pressable 
+            onPress={() => confirmDeleteVital(item.id, new Date(item.timestamp))}
+            hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+            style={styles.deleteButton}
+          >
+            <IconSymbol
+              ios_icon_name="trash"
+              android_material_icon_name="delete"
+              size={18}
+              color={colors.error}
+            />
+          </Pressable>
+        </View>
+
+        {primaryValues.length > 0 && (
+          <View style={styles.primaryValuesGrid}>
+            {primaryValues.map((val, idx) => (
+              <View key={idx} style={styles.primaryValueItem}>
+                <Text style={styles.primaryValueLabel}>{val.label}</Text>
+                <View style={styles.primaryValueRow}>
+                  <Text style={styles.primaryValueText}>{val.value}</Text>
+                  <Text style={styles.primaryValueUnit}>{val.unit}</Text>
+                </View>
+              </View>
+            ))}
+          </View>
+        )}
+
+        {secondaryValues.length > 0 && (
+          <View style={styles.secondaryValuesGrid}>
+            {secondaryValues.map((val, idx) => (
+              <View key={idx} style={styles.secondaryValueItem}>
+                <Text style={styles.secondaryValueLabel}>{val.label}</Text>
+                <Text style={styles.secondaryValueText}>
+                  {val.value}
+                  <Text style={styles.secondaryValueUnit}> {val.unit}</Text>
+                </Text>
+              </View>
+            ))}
+          </View>
+        )}
+
+        {item.notes && (
+          <View style={styles.notesContainer}>
+            <Text style={styles.notesText}>{item.notes}</Text>
+          </View>
+        )}
+      </View>
+    );
+  };
+
+  const renderLabEntry = ({ item }: { item: LabEntry }) => {
+    const timestampText = formatTimestamp(new Date(item.timestamp));
+    
+    const primaryValues = [];
+    if (item.wbc) {
+      primaryValues.push({ label: 'WBC', value: item.wbc.toFixed(1), unit: 'K/μL' });
+    }
+    if (item.hb) {
+      primaryValues.push({ label: 'Hb', value: item.hb.toFixed(1), unit: 'g/dL' });
+    }
+    if (item.cr) {
+      primaryValues.push({ label: 'Cr', value: item.cr.toFixed(1), unit: 'mg/dL' });
+    }
+    if (item.lactate) {
+      primaryValues.push({ label: 'Lactate', value: item.lactate.toFixed(1), unit: 'mmol/L' });
+    }
+    
+    const secondaryValues = [];
+    if (item.na) {
+      secondaryValues.push({ label: 'Na', value: `${item.na}`, unit: 'mEq/L' });
+    }
+    if (item.k) {
+      secondaryValues.push({ label: 'K', value: item.k.toFixed(1), unit: 'mEq/L' });
+    }
+    if (item.plt) {
+      secondaryValues.push({ label: 'Plt', value: `${item.plt}`, unit: 'K/μL' });
+    }
+    if (item.inr) {
+      secondaryValues.push({ label: 'INR', value: item.inr.toFixed(2), unit: '' });
+    }
+    if (item.bili) {
+      secondaryValues.push({ label: 'Bili', value: item.bili.toFixed(1), unit: 'mg/dL' });
+    }
+    if (item.alt) {
+      secondaryValues.push({ label: 'ALT', value: `${item.alt}`, unit: 'U/L' });
+    }
+    if (item.ast) {
+      secondaryValues.push({ label: 'AST', value: `${item.ast}`, unit: 'U/L' });
+    }
+
+    return (
+      <View style={styles.cleanEntryCard}>
+        <View style={styles.cleanEntryHeader}>
+          <Text style={styles.cleanTimestamp}>{timestampText}</Text>
+          <Pressable 
+            onPress={() => confirmDeleteLab(item.id, new Date(item.timestamp))}
+            hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+            style={styles.deleteButton}
+          >
+            <IconSymbol
+              ios_icon_name="trash"
+              android_material_icon_name="delete"
+              size={18}
+              color={colors.error}
+            />
+          </Pressable>
+        </View>
+
+        {primaryValues.length > 0 && (
+          <View style={styles.primaryValuesGrid}>
+            {primaryValues.map((val, idx) => (
+              <View key={idx} style={styles.primaryValueItem}>
+                <Text style={styles.primaryValueLabel}>{val.label}</Text>
+                <View style={styles.primaryValueRow}>
+                  <Text style={styles.primaryValueText}>{val.value}</Text>
+                  {val.unit && <Text style={styles.primaryValueUnit}>{val.unit}</Text>}
+                </View>
+              </View>
+            ))}
+          </View>
+        )}
+
+        {secondaryValues.length > 0 && (
+          <View style={styles.secondaryValuesGrid}>
+            {secondaryValues.map((val, idx) => (
+              <View key={idx} style={styles.secondaryValueItem}>
+                <Text style={styles.secondaryValueLabel}>{val.label}</Text>
+                <Text style={styles.secondaryValueText}>
+                  {val.value}
+                  {val.unit && <Text style={styles.secondaryValueUnit}> {val.unit}</Text>}
+                </Text>
+              </View>
+            ))}
+          </View>
+        )}
+
+        {item.notes && (
+          <View style={styles.notesContainer}>
+            <Text style={styles.notesText}>{item.notes}</Text>
+          </View>
+        )}
+      </View>
+    );
+  };
+
   return (
     <SafeAreaView style={styles.safeArea} edges={['top']}>
       <ScrollView
@@ -399,7 +592,6 @@ export default function PatientDetailScreen({ route, navigation }: any) {
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
       >
-        {/* Patient Header Card */}
         <View style={styles.headerCard}>
           <View style={styles.headerTop}>
             <View style={styles.headerInfo}>
@@ -418,7 +610,6 @@ export default function PatientDetailScreen({ route, navigation }: any) {
           </View>
         </View>
 
-        {/* Alerts Section */}
         {alerts.length > 0 && (
           <View style={styles.section}>
             <View style={styles.sectionHeader}>
@@ -484,7 +675,6 @@ export default function PatientDetailScreen({ route, navigation }: any) {
           </View>
         )}
 
-        {/* Patient Information Link */}
         <View style={styles.section}>
           <TouchableOpacity
             style={styles.infoLinkCard}
@@ -513,7 +703,6 @@ export default function PatientDetailScreen({ route, navigation }: any) {
           </TouchableOpacity>
         </View>
 
-        {/* Vital Signs Section */}
         <View style={styles.section}>
           <View style={styles.sectionHeaderRow}>
             <View style={styles.sectionHeader}>
@@ -549,50 +738,16 @@ export default function PatientDetailScreen({ route, navigation }: any) {
               <Text style={styles.emptyStateSubtext}>Tap Add to record vital signs</Text>
             </View>
           ) : (
-            <View style={styles.entriesList}>
-              {sortedVitals.map((vital) => {
-                const timestampText = formatTimestamp(new Date(vital.timestamp));
-                const hrText = vital.hr ? `HR: ${vital.hr}` : null;
-                const bpText = vital.bpSys && vital.bpDia ? `BP: ${vital.bpSys}/${vital.bpDia}` : null;
-                const tempText = vital.temp ? `Temp: ${vital.temp.toFixed(1)}°C` : null;
-                const spo2Text = vital.spo2 ? `SpO2: ${vital.spo2}%` : null;
-                const rrText = vital.rr ? `RR: ${vital.rr}` : null;
-                const uoText = vital.urineOutput ? `UO: ${vital.urineOutput} ml/hr` : null;
-                const painText = vital.pain !== undefined ? `Pain: ${vital.pain}/10` : null;
-
-                return (
-                  <View key={vital.id} style={styles.entryCard}>
-                    <View style={styles.entryHeader}>
-                      <Text style={styles.entryTimestamp}>{timestampText}</Text>
-                      <TouchableOpacity onPress={() => handleDeleteVital(vital.id)}>
-                        <IconSymbol
-                          ios_icon_name="trash"
-                          android_material_icon_name="delete"
-                          size={18}
-                          color={colors.error}
-                        />
-                      </TouchableOpacity>
-                    </View>
-                    <View style={styles.entryValues}>
-                      {hrText && <Text style={styles.entryValue}>{hrText}</Text>}
-                      {bpText && <Text style={styles.entryValue}>{bpText}</Text>}
-                      {tempText && <Text style={styles.entryValue}>{tempText}</Text>}
-                      {spo2Text && <Text style={styles.entryValue}>{spo2Text}</Text>}
-                      {rrText && <Text style={styles.entryValue}>{rrText}</Text>}
-                      {uoText && <Text style={styles.entryValue}>{uoText}</Text>}
-                      {painText && <Text style={styles.entryValue}>{painText}</Text>}
-                    </View>
-                    {vital.notes && (
-                      <Text style={styles.entryNotes}>{vital.notes}</Text>
-                    )}
-                  </View>
-                );
-              })}
-            </View>
+            <FlatList
+              data={sortedVitals}
+              renderItem={renderVitalEntry}
+              keyExtractor={(item) => item.id}
+              scrollEnabled={false}
+              contentContainerStyle={styles.entriesList}
+            />
           )}
         </View>
 
-        {/* Laboratory Values Section */}
         <View style={styles.section}>
           <View style={styles.sectionHeaderRow}>
             <View style={styles.sectionHeader}>
@@ -628,58 +783,16 @@ export default function PatientDetailScreen({ route, navigation }: any) {
               <Text style={styles.emptyStateSubtext}>Tap Add to record lab values</Text>
             </View>
           ) : (
-            <View style={styles.entriesList}>
-              {sortedLabs.map((lab) => {
-                const timestampText = formatTimestamp(new Date(lab.timestamp));
-                const wbcText = lab.wbc ? `WBC: ${lab.wbc.toFixed(1)}` : null;
-                const hbText = lab.hb ? `Hb: ${lab.hb.toFixed(1)}` : null;
-                const pltText = lab.plt ? `Plt: ${lab.plt}` : null;
-                const naText = lab.na ? `Na: ${lab.na}` : null;
-                const kText = lab.k ? `K: ${lab.k.toFixed(1)}` : null;
-                const crText = lab.cr ? `Cr: ${lab.cr.toFixed(1)}` : null;
-                const lactateText = lab.lactate ? `Lactate: ${lab.lactate.toFixed(1)}` : null;
-                const biliText = lab.bili ? `Bili: ${lab.bili.toFixed(1)}` : null;
-                const altText = lab.alt ? `ALT: ${lab.alt}` : null;
-                const astText = lab.ast ? `AST: ${lab.ast}` : null;
-                const inrText = lab.inr ? `INR: ${lab.inr.toFixed(2)}` : null;
-
-                return (
-                  <View key={lab.id} style={styles.entryCard}>
-                    <View style={styles.entryHeader}>
-                      <Text style={styles.entryTimestamp}>{timestampText}</Text>
-                      <TouchableOpacity onPress={() => handleDeleteLab(lab.id)}>
-                        <IconSymbol
-                          ios_icon_name="trash"
-                          android_material_icon_name="delete"
-                          size={18}
-                          color={colors.error}
-                        />
-                      </TouchableOpacity>
-                    </View>
-                    <View style={styles.entryValues}>
-                      {wbcText && <Text style={styles.entryValue}>{wbcText}</Text>}
-                      {hbText && <Text style={styles.entryValue}>{hbText}</Text>}
-                      {pltText && <Text style={styles.entryValue}>{pltText}</Text>}
-                      {naText && <Text style={styles.entryValue}>{naText}</Text>}
-                      {kText && <Text style={styles.entryValue}>{kText}</Text>}
-                      {crText && <Text style={styles.entryValue}>{crText}</Text>}
-                      {lactateText && <Text style={styles.entryValue}>{lactateText}</Text>}
-                      {biliText && <Text style={styles.entryValue}>{biliText}</Text>}
-                      {altText && <Text style={styles.entryValue}>{altText}</Text>}
-                      {astText && <Text style={styles.entryValue}>{astText}</Text>}
-                      {inrText && <Text style={styles.entryValue}>{inrText}</Text>}
-                    </View>
-                    {lab.notes && (
-                      <Text style={styles.entryNotes}>{lab.notes}</Text>
-                    )}
-                  </View>
-                );
-              })}
-            </View>
+            <FlatList
+              data={sortedLabs}
+              renderItem={renderLabEntry}
+              keyExtractor={(item) => item.id}
+              scrollEnabled={false}
+              contentContainerStyle={styles.entriesList}
+            />
           )}
         </View>
 
-        {/* Trends Section */}
         {trends.length > 0 && (
           <View style={styles.section}>
             <View style={styles.sectionHeader}>
@@ -728,7 +841,6 @@ export default function PatientDetailScreen({ route, navigation }: any) {
           </View>
         )}
 
-        {/* Disclaimer */}
         <View style={styles.disclaimerCard}>
           <IconSymbol
             ios_icon_name="info.circle"
@@ -745,7 +857,32 @@ export default function PatientDetailScreen({ route, navigation }: any) {
         <View style={styles.bottomSpacer} />
       </ScrollView>
 
-      {/* Add/Edit Modal */}
+      <Modal
+        visible={deleteModalVisible}
+        animationType="fade"
+        transparent={true}
+        onRequestClose={cancelDelete}
+      >
+        <View style={styles.deleteModalOverlay}>
+          <View style={styles.deleteModalContent}>
+            <Text style={styles.deleteModalTitle}>Delete this entry?</Text>
+            {deleteTarget && (
+              <Text style={styles.deleteModalMessage}>
+                {deleteTarget.type === 'vitals' ? 'Vital signs' : 'Lab values'} from {deleteTarget.timestamp}
+              </Text>
+            )}
+            <View style={styles.deleteModalActions}>
+              <Pressable style={styles.deleteModalCancelButton} onPress={cancelDelete}>
+                <Text style={styles.deleteModalCancelText}>Cancel</Text>
+              </Pressable>
+              <Pressable style={styles.deleteModalDeleteButton} onPress={executeDelete}>
+                <Text style={styles.deleteModalDeleteText}>Delete</Text>
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
       <Modal
         visible={editModalVisible}
         animationType="slide"
@@ -1227,7 +1364,7 @@ const styles = StyleSheet.create({
   entriesList: {
     gap: spacing.md,
   },
-  entryCard: {
+  cleanEntryCard: {
     backgroundColor: colors.card,
     borderRadius: borderRadius.lg,
     padding: spacing.lg,
@@ -1235,40 +1372,98 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
     ...shadows.sm,
   },
-  entryHeader: {
+  cleanEntryHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: spacing.md,
+    paddingBottom: spacing.sm,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.borderLight,
   },
-  entryTimestamp: {
-    fontSize: typography.caption,
+  cleanTimestamp: {
+    fontSize: typography.bodySmall,
     fontWeight: typography.semibold,
     color: colors.textSecondary,
+    letterSpacing: 0.2,
   },
-  entryValues: {
+  deleteButton: {
+    padding: spacing.xs,
+  },
+  primaryValuesGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing.lg,
+    marginBottom: spacing.sm,
+  },
+  primaryValueItem: {
+    minWidth: 80,
+  },
+  primaryValueLabel: {
+    fontSize: typography.caption,
+    fontWeight: typography.medium,
+    color: colors.textLight,
+    marginBottom: spacing.xs,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  primaryValueRow: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    gap: spacing.xs,
+  },
+  primaryValueText: {
+    fontSize: typography.h4,
+    fontWeight: typography.bold,
+    color: colors.text,
+    letterSpacing: -0.3,
+  },
+  primaryValueUnit: {
+    fontSize: typography.caption,
+    fontWeight: typography.medium,
+    color: colors.textSecondary,
+  },
+  secondaryValuesGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: spacing.md,
+    paddingTop: spacing.md,
+    borderTopWidth: 1,
+    borderTopColor: colors.borderLight,
   },
-  entryValue: {
-    fontSize: typography.bodySmall,
+  secondaryValueItem: {
+    minWidth: 70,
+  },
+  secondaryValueLabel: {
+    fontSize: typography.tiny,
     fontWeight: typography.medium,
-    color: colors.text,
-    backgroundColor: colors.backgroundAlt,
-    paddingHorizontal: spacing.sm,
-    paddingVertical: spacing.xs,
-    borderRadius: borderRadius.sm,
+    color: colors.textLight,
+    marginBottom: 2,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
   },
-  entryNotes: {
-    fontSize: typography.caption,
-    fontWeight: typography.regular,
+  secondaryValueText: {
+    fontSize: typography.bodySmall,
+    fontWeight: typography.semibold,
     color: colors.textSecondary,
+  },
+  secondaryValueUnit: {
+    fontSize: typography.tiny,
+    fontWeight: typography.regular,
+    color: colors.textLight,
+  },
+  notesContainer: {
     marginTop: spacing.md,
     paddingTop: spacing.md,
     borderTopWidth: 1,
     borderTopColor: colors.borderLight,
+  },
+  notesText: {
+    fontSize: typography.caption,
+    fontWeight: typography.regular,
+    color: colors.textSecondary,
     lineHeight: 18,
+    fontStyle: 'italic',
   },
   alertCard: {
     borderRadius: borderRadius.lg,
@@ -1384,6 +1579,64 @@ const styles = StyleSheet.create({
   },
   bottomSpacer: {
     height: spacing.xxxxl,
+  },
+  deleteModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.6)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: spacing.xl,
+  },
+  deleteModalContent: {
+    backgroundColor: colors.backgroundAlt,
+    borderRadius: borderRadius.xl,
+    padding: spacing.xl,
+    width: '100%',
+    maxWidth: 400,
+    ...shadows.lg,
+  },
+  deleteModalTitle: {
+    fontSize: typography.h4,
+    fontWeight: typography.bold,
+    color: colors.text,
+    marginBottom: spacing.sm,
+    textAlign: 'center',
+  },
+  deleteModalMessage: {
+    fontSize: typography.body,
+    fontWeight: typography.regular,
+    color: colors.textSecondary,
+    marginBottom: spacing.xl,
+    textAlign: 'center',
+    lineHeight: 22,
+  },
+  deleteModalActions: {
+    flexDirection: 'row',
+    gap: spacing.md,
+  },
+  deleteModalCancelButton: {
+    flex: 1,
+    paddingVertical: spacing.md,
+    borderRadius: borderRadius.md,
+    backgroundColor: colors.borderLight,
+    alignItems: 'center',
+  },
+  deleteModalCancelText: {
+    fontSize: typography.body,
+    fontWeight: typography.semibold,
+    color: colors.textSecondary,
+  },
+  deleteModalDeleteButton: {
+    flex: 1,
+    paddingVertical: spacing.md,
+    borderRadius: borderRadius.md,
+    backgroundColor: colors.error,
+    alignItems: 'center',
+  },
+  deleteModalDeleteText: {
+    fontSize: typography.body,
+    fontWeight: typography.semibold,
+    color: '#FFFFFF',
   },
   modalOverlay: {
     flex: 1,
