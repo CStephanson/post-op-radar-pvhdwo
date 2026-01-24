@@ -2,7 +2,9 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Patient } from '@/types/patient';
 
-const PATIENTS_KEY = '@opmgmt_patients';
+// CRITICAL: Single source of truth for patient storage
+// All screens MUST use this exact key
+const PATIENTS_KEY = 'opmgmt_patients_v1';
 const MIGRATION_FLAG_KEY = '@opmgmt_migrated';
 
 /**
@@ -13,6 +15,7 @@ const MIGRATION_FLAG_KEY = '@opmgmt_migrated';
 
 /**
  * Generate a unique ID for a new patient
+ * Uses timestamp + random string to ensure uniqueness
  */
 function generateId(): string {
   return `patient_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
@@ -20,6 +23,7 @@ function generateId(): string {
 
 /**
  * Get all patients from local storage
+ * Returns empty array if no patients exist
  */
 export async function getAllPatients(): Promise<Patient[]> {
   try {
@@ -105,6 +109,7 @@ async function saveAllPatients(patients: Patient[]): Promise<void> {
 
 /**
  * Create a new patient
+ * CRITICAL: This APPENDS to the existing list, does NOT overwrite
  * Returns the created patient with generated ID and timestamps
  */
 export async function createPatient(patientData: Omit<Patient, 'id' | 'userId' | 'createdAt' | 'updatedAt'>): Promise<Patient> {
@@ -112,9 +117,10 @@ export async function createPatient(patientData: Omit<Patient, 'id' | 'userId' |
     console.log('[LocalStorage] ========== CREATE PATIENT START ==========');
     console.log('[LocalStorage] Creating new patient:', patientData.name);
     
-    // STEP 1: Load existing patients
+    // STEP 1: Load existing patients from storage
     const existingPatients = await getAllPatients();
     console.log('[LocalStorage] Current patient count BEFORE create:', existingPatients.length);
+    console.log('[LocalStorage] Existing patient names:', existingPatients.map(p => p.name).join(', ') || '(none)');
     
     // STEP 2: Generate unique ID
     const newId = generateId();
@@ -131,17 +137,19 @@ export async function createPatient(patientData: Omit<Patient, 'id' | 'userId' |
     
     console.log('[LocalStorage] New patient object created with ID:', newPatient.id, 'Name:', newPatient.name);
     
-    // STEP 4: Append to existing list (NOT replace)
+    // STEP 4: APPEND to existing list (NOT replace)
     const updatedPatients = [...existingPatients, newPatient];
     console.log('[LocalStorage] Patient list updated. New count:', updatedPatients.length, '(was', existingPatients.length, ')');
+    console.log('[LocalStorage] Updated patient names:', updatedPatients.map(p => p.name).join(', '));
     
-    // STEP 5: Save the updated list
+    // STEP 5: Save the updated list back to storage
     await saveAllPatients(updatedPatients);
     
     // STEP 6: Verify by re-reading from storage
     console.log('[LocalStorage] Verifying patient was saved...');
     const verifyPatients = await getAllPatients();
     console.log('[LocalStorage] Verification: Storage now contains', verifyPatients.length, 'patients');
+    console.log('[LocalStorage] Verification patient names:', verifyPatients.map(p => p.name).join(', '));
     
     const savedPatient = verifyPatients.find(p => p.id === newId);
     if (!savedPatient) {
@@ -281,16 +289,26 @@ export async function migrateExistingData(): Promise<void> {
     
     console.log('[LocalStorage] Running one-time data migration');
     
-    // Check if there's any existing patient data in the new format
-    const existingPatients = await getAllPatients();
-    if (existingPatients.length > 0) {
-      console.log('[LocalStorage] Found', existingPatients.length, 'existing patients, skipping migration');
-      await AsyncStorage.setItem(MIGRATION_FLAG_KEY, 'true');
-      return;
+    // Check for old storage key
+    const oldKey = '@opmgmt_patients';
+    const oldData = await AsyncStorage.getItem(oldKey);
+    
+    if (oldData) {
+      console.log('[LocalStorage] Found old patient data, migrating to new key');
+      const oldPatients = JSON.parse(oldData);
+      console.log('[LocalStorage] Migrating', oldPatients.length, 'patients from old storage');
+      
+      // Save to new key
+      await AsyncStorage.setItem(PATIENTS_KEY, oldData);
+      console.log('[LocalStorage] Migration complete, removing old key');
+      
+      // Remove old key
+      await AsyncStorage.removeItem(oldKey);
     }
     
-    // TODO: If there was cached data from the old backend system, import it here
-    // For now, we just mark migration as complete
+    // Check if there's any existing patient data in the new format
+    const existingPatients = await getAllPatients();
+    console.log('[LocalStorage] After migration, found', existingPatients.length, 'patients in new storage');
     
     await AsyncStorage.setItem(MIGRATION_FLAG_KEY, 'true');
     console.log('[LocalStorage] Migration complete');

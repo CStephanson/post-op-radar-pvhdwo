@@ -146,6 +146,7 @@ export default function HomeScreen({ navigation }: any) {
   const sortedPatients = sortPatients(patients, sortBy);
   const currentSortLabel = getSortLabel(sortBy);
   const patientCountText = `${sortedPatients.length}`;
+  const debugLoadedText = `Loaded patients: ${sortedPatients.length}`;
 
   return (
     <SafeAreaView style={styles.safeArea} edges={['top']}>
@@ -164,6 +165,9 @@ export default function HomeScreen({ navigation }: any) {
                 <Text style={styles.disclaimerText}>Educational use only</Text>
               </View>
             </View>
+          </View>
+          <View style={styles.debugBadge}>
+            <Text style={styles.debugText}>{debugLoadedText}</Text>
           </View>
         </View>
 
@@ -396,6 +400,19 @@ const styles = StyleSheet.create({
     fontWeight: typography.medium,
     color: colors.textMuted,
     letterSpacing: 0.1,
+  },
+  debugBadge: {
+    paddingHorizontal: spacing.xl,
+    paddingVertical: spacing.xs,
+    backgroundColor: colors.primarySubtle,
+    borderTopWidth: 1,
+    borderTopColor: colors.borderLight,
+  },
+  debugText: {
+    fontSize: typography.caption,
+    fontWeight: typography.semibold,
+    color: colors.primary,
+    textAlign: 'center',
   },
   scrollView: {
     flex: 1,
