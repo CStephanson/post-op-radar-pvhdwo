@@ -1,6 +1,4 @@
 
-
-
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
@@ -15,16 +13,14 @@ import {
   Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useRouter, useLocalSearchParams, Stack } from 'expo-router';
 import { colors, typography, spacing, borderRadius, shadows } from '@/styles/commonStyles';
 import { IconSymbol } from '@/components/IconSymbol';
 import { Patient, Alert as PatientAlert, AlertStatus, TrendData, VitalSigns, LabValues } from '@/types/patient';
 import { calculateTrends, generateAlerts, calculateAlertStatus } from '@/utils/alertLogic';
 
-export default function PatientDetailScreen() {
+export default function PatientDetailScreen({ route, navigation }: any) {
   console.log('PatientDetailScreen rendered');
-  const router = useRouter();
-  const { id } = useLocalSearchParams();
+  const { id } = route.params;
   const [patient, setPatient] = useState<Patient | null>(null);
   const [alerts, setAlerts] = useState<PatientAlert[]>([]);
   const [trends, setTrends] = useState<TrendData[]>([]);
@@ -51,7 +47,7 @@ export default function PatientDetailScreen() {
       if (!patientData) {
         console.error('[PatientDetail] Patient not found in local storage');
         Alert.alert('Error', 'Patient not found', [
-          { text: 'OK', onPress: () => router.back() }
+          { text: 'OK', onPress: () => navigation.goBack() }
         ]);
         return;
       }
@@ -63,10 +59,10 @@ export default function PatientDetailScreen() {
       console.error('[PatientDetail] Error loading patient data:', error);
       Alert.alert('Storage Error', 'Failed to load patient data from local storage', [
         { text: 'Retry', onPress: loadPatientData },
-        { text: 'Cancel', onPress: () => router.back() }
+        { text: 'Cancel', onPress: () => navigation.goBack() }
       ]);
     }
-  }, [id, router]);
+  }, [id, navigation]);
 
   useEffect(() => {
     loadPatientData();
@@ -192,13 +188,6 @@ export default function PatientDetailScreen() {
   if (!patient) {
     return (
       <SafeAreaView style={styles.safeArea}>
-        <Stack.Screen
-          options={{
-            headerShown: true,
-            title: 'Patient Details',
-            headerBackTitle: 'Back',
-          }}
-        />
         <View style={styles.loadingContainer}>
           <Text style={styles.loadingText}>Loading patient data...</Text>
         </View>
@@ -258,17 +247,6 @@ export default function PatientDetailScreen() {
 
   return (
     <SafeAreaView style={styles.safeArea} edges={['top']}>
-      <Stack.Screen
-        options={{
-          headerShown: true,
-          title: patient.name,
-          headerBackTitle: 'Back',
-          headerStyle: {
-            backgroundColor: colors.backgroundAlt,
-          },
-          headerTintColor: colors.primary,
-        }}
-      />
       <ScrollView
         style={styles.scrollView}
         contentContainerStyle={styles.scrollContent}
@@ -363,7 +341,7 @@ export default function PatientDetailScreen() {
         <View style={styles.section}>
           <TouchableOpacity
             style={styles.infoLinkCard}
-            onPress={() => router.push(`/patient-info/${id}`)}
+            onPress={() => navigation.navigate('PatientInfo', { id })}
           >
             <View style={styles.infoLinkLeft}>
               <IconSymbol

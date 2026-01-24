@@ -7,7 +7,6 @@
 
 import React from "react";
 import { View, Text, TouchableOpacity, StyleSheet, ScrollView, Platform } from "react-native";
-import { useRouter } from "expo-router";
 
 interface ErrorBoundaryProps {
   children: React.ReactNode;
@@ -62,17 +61,9 @@ export class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoun
     const errorMessage = error?.message || 'Unknown error occurred';
     const errorStack = error?.stack || '';
     
-    // Check if this is an auth-related error
-    const isAuthError = errorMessage.toLowerCase().includes('auth') || 
-                        errorMessage.toLowerCase().includes('session') ||
-                        errorMessage.toLowerCase().includes('guest') ||
-                        errorMessage.toLowerCase().includes('token');
-
-    const titleText = isAuthError ? 'Session Issue' : 'Something went wrong';
-    const messageText = isAuthError 
-      ? 'There was an issue with your session. Please try signing in again.'
-      : 'The app encountered an unexpected error. Please try again.';
-    const buttonText = isAuthError ? 'Go to Sign In' : 'Try Again';
+    const titleText = 'Something went wrong';
+    const messageText = 'The app encountered an unexpected error. Please try again.';
+    const buttonText = 'Try Again';
 
     return (
       <View style={styles.container}>

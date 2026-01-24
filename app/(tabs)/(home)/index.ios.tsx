@@ -1,5 +1,8 @@
 
 import React, { useState, useCallback } from 'react';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { colors, typography, spacing, borderRadius, shadows } from '@/styles/commonStyles';
+import { IconSymbol } from '@/components/IconSymbol';
 import {
   View,
   Text,
@@ -9,33 +12,26 @@ import {
   ActivityIndicator,
   Alert,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { useRouter, useFocusEffect } from 'expo-router';
-import { colors, typography, spacing, borderRadius, shadows } from '@/styles/commonStyles';
-import { IconSymbol } from '@/components/IconSymbol';
-import { Patient, AlertStatus, SortOption } from '@/types/patient';
+import { useFocusEffect } from '@react-navigation/native';
 import { getAllPatients } from '@/utils/localStorage';
+import { Patient, AlertStatus, SortOption } from '@/types/patient';
 
-export default function HomeScreen() {
-  console.log('[HomeScreen] Rendered (iOS) - local-only mode');
-  const router = useRouter();
+export default function HomeScreen({ navigation }: any) {
+  console.log('[HomeScreen] Rendered - local-only mode (iOS)');
   const [patients, setPatients] = useState<Patient[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
   const [sortBy, setSortBy] = useState<SortOption>('status');
   const [showSortMenu, setShowSortMenu] = useState(false);
 
   const loadPatients = useCallback(async () => {
     console.log('[HomeScreen] Loading patients from local storage');
     setLoading(true);
-    setError(null);
     try {
       const patientsData = await getAllPatients();
       console.log('[HomeScreen] Loaded', patientsData.length, 'patients from local storage');
       setPatients(patientsData);
     } catch (err: any) {
       console.error('[HomeScreen] Error loading patients:', err);
-      setError('Failed to load patients from local storage');
       Alert.alert(
         'Storage Error',
         'Failed to load patients from local storage. Please try again.',
@@ -55,7 +51,6 @@ export default function HomeScreen() {
     }
   }, []);
 
-  // Refresh patient list when screen comes into focus (e.g., after adding/editing a patient)
   useFocusEffect(
     useCallback(() => {
       console.log('[HomeScreen] Screen focused - refreshing patient list');
@@ -90,12 +85,12 @@ export default function HomeScreen() {
 
   const handlePatientPress = (patientId: string) => {
     console.log('User tapped patient card:', patientId);
-    router.push(`/patient/${patientId}`);
+    navigation.navigate('PatientDetail', { id: patientId });
   };
 
   const handleAddPatient = () => {
     console.log('Opening Add Patient screen...');
-    router.push('/add-patient');
+    navigation.navigate('AddPatient');
   };
 
   const getAlertColor = (status: AlertStatus) => {

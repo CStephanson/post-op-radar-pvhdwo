@@ -2,7 +2,6 @@
 import "react-native-reanimated";
 import React, { useEffect, useState } from "react";
 import { useFonts } from "expo-font";
-import { Stack } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import { SystemBars } from "react-native-edge-to-edge";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
@@ -12,11 +11,19 @@ import {
   DefaultTheme,
   Theme,
   ThemeProvider,
+  NavigationContainer,
 } from "@react-navigation/native";
+import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { StatusBar } from "expo-status-bar";
 import { WidgetProvider } from "@/contexts/WidgetContext";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { migrateExistingData } from "@/utils/localStorage";
+
+// Import screens
+import HomeScreen from "./(tabs)/(home)/index";
+import AddPatientScreen from "./add-patient";
+import PatientDetailScreen from "./patient/[id]";
+import PatientInfoScreen from "./patient-info/[id]";
 
 // Prevent the splash screen from auto-hiding before asset loading is complete.
 SplashScreen.preventAutoHideAsync();
@@ -32,15 +39,11 @@ if (typeof ErrorUtils !== 'undefined') {
   });
 }
 
-// App goes directly to patient dashboard - no authentication
-export const unstable_settings = {
-  initialRouteName: "(tabs)",
-};
+const Stack = createNativeStackNavigator();
 
 export default function RootLayout() {
   console.log('[App] ===== RootLayout rendering =====');
   const colorScheme = useColorScheme();
-  const router = useRouter();
   const [loaded] = useFonts({
     SpaceMono: require("../assets/fonts/SpaceMono-Regular.ttf"),
   });
@@ -136,12 +139,47 @@ export default function RootLayout() {
       >
         <WidgetProvider>
           <GestureHandlerRootView style={{ flex: 1 }}>
-            <Stack>
-              <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-              <Stack.Screen name="add-patient" options={{ headerShown: true, title: 'Add Patient' }} />
-              <Stack.Screen name="patient/[id]" options={{ headerShown: true, title: 'Patient Details' }} />
-              <Stack.Screen name="patient-info/[id]" options={{ headerShown: true, title: 'Patient Information' }} />
-            </Stack>
+            <NavigationContainer>
+              <Stack.Navigator
+                initialRouteName="Home"
+                screenOptions={{
+                  headerShown: false,
+                }}
+              >
+                <Stack.Screen 
+                  name="Home" 
+                  component={HomeScreen}
+                  options={{ headerShown: false }}
+                />
+                <Stack.Screen 
+                  name="AddPatient" 
+                  component={AddPatientScreen}
+                  options={{ 
+                    headerShown: true, 
+                    title: 'Add Patient',
+                    headerBackTitle: 'Back',
+                  }}
+                />
+                <Stack.Screen 
+                  name="PatientDetail" 
+                  component={PatientDetailScreen}
+                  options={{ 
+                    headerShown: true, 
+                    title: 'Patient Details',
+                    headerBackTitle: 'Back',
+                  }}
+                />
+                <Stack.Screen 
+                  name="PatientInfo" 
+                  component={PatientInfoScreen}
+                  options={{ 
+                    headerShown: true, 
+                    title: 'Patient Information',
+                    headerBackTitle: 'Back',
+                  }}
+                />
+              </Stack.Navigator>
+            </NavigationContainer>
             <SystemBars style={"auto"} />
           </GestureHandlerRootView>
         </WidgetProvider>

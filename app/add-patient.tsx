@@ -13,15 +13,13 @@ import {
   KeyboardAvoidingView,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useRouter, Stack } from 'expo-router';
 import { colors, typography, spacing, borderRadius, shadows } from '@/styles/commonStyles';
 import { IconSymbol } from '@/components/IconSymbol';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { createPatient } from '@/utils/localStorage';
 
-export default function AddPatientScreen() {
+export default function AddPatientScreen({ navigation }: any) {
   console.log('AddPatientScreen rendered - Add Patient clicked');
-  const router = useRouter();
   
   const [saving, setSaving] = useState(false);
   
@@ -55,7 +53,7 @@ export default function AddPatientScreen() {
 
   const handleCancel = () => {
     console.log('User tapped Cancel button');
-    router.back();
+    navigation.goBack();
   };
 
   const handleAddPatient = async () => {
@@ -122,7 +120,7 @@ export default function AddPatientScreen() {
       
       // Navigate back to dashboard - it will auto-refresh via useFocusEffect
       console.log('[AddPatient] Navigating back to dashboard');
-      router.replace('/(tabs)/(home)/');
+      navigation.navigate('Home');
     } catch (error: any) {
       console.error('[AddPatient] Error creating patient:', error);
       const errorMsg = error.message || 'Failed to add patient to local storage. Please try again.';
@@ -197,17 +195,6 @@ export default function AddPatientScreen() {
 
   return (
     <SafeAreaView style={styles.safeArea} edges={['top']}>
-      <Stack.Screen
-        options={{
-          headerShown: true,
-          title: 'Add Patient',
-          headerBackTitle: 'Back',
-          headerStyle: {
-            backgroundColor: colors.backgroundAlt,
-          },
-          headerTintColor: colors.primary,
-        }}
-      />
       <KeyboardAvoidingView
         style={styles.container}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
