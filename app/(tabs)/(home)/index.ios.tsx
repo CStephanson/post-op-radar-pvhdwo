@@ -4,18 +4,19 @@ import {
   View,
   Text,
   StyleSheet,
-  ScrollView,
+  FlatList,
   TouchableOpacity,
   ActivityIndicator,
   Alert,
   Pressable,
+  Modal,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { colors, typography, spacing, borderRadius, shadows } from '@/styles/commonStyles';
 import { IconSymbol } from '@/components/IconSymbol';
 import { Patient, AlertStatus, SortOption } from '@/types/patient';
-import { getAllPatients } from '@/utils/localStorage';
+import { getAllPatients, deletePatient } from '@/utils/localStorage';
 
 export default function HomeScreen() {
   console.log('[HomeScreen] Component rendered');
@@ -24,6 +25,9 @@ export default function HomeScreen() {
   const [loading, setLoading] = useState(true);
   const [sortBy, setSortBy] = useState<SortOption>('status');
   const [showSortMenu, setShowSortMenu] = useState(false);
+  const [deleteModalVisible, setDeleteModalVisible] = useState(false);
+  const [patientToDelete, setPatientToDelete] = useState<Patient | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
   const loadPatients = useCallback(async () => {
     console.log('[HomeScreen] ========== LOAD PATIENTS START ==========');
@@ -34,8 +38,19 @@ export default function HomeScreen() {
       console.log('[HomeScreen] Loaded', patientsData.length, 'patients from local storage');
       console.log('[HomeScreen] Patient IDs:', patientsData.map(p => p.id).join(', '));
       console.log('[HomeScreen] Patient names:', patientsData.map(p => p.name).join(', '));
-      setPatients(patientsData);
-      console.log('[HomeScreen] State updated with', patientsData.length, 'patients');
+      
+      // CRITICAL: Ensure all patients have unique IDs
+      const patientsWithIds = patientsData.map(p => {
+        if (!p.id) {
+          console.error('[HomeScreen] Patient missing ID! Name:', p.name);
+          // Generate a unique ID if missing
+          return { ...p, id: `patient_${Date.now()}_${Math.random().toString(36).substr(2, 9)}` };
+        }
+        return p;
+      });
+      
+      setPatients(patientsWithIds);
+      console.log('[HomeScreen] State updated with', patientsWithIds.length, 'patients');
       console.log('[HomeScreen] ========== LOAD PATIENTS END ==========');
     } catch (err: any) {
       console.error('[HomeScreen] Error loading patients:', err);
@@ -103,14 +118,90 @@ export default function HomeScreen() {
     navigation.navigate('AddPatient' as never);
   };
 
-  const handleTestTap = () => {
-    console.log('[HomeScreen] TEST TAP button pressed');
-    Alert.alert('Dashboard tap works', 'The TEST TAP button responded successfully!');
+  const requestDeletePatient = (patient: Patient) => {
+    console.log('[HomeScreen] ========== DELETE BUTTON PRESSED ==========');
+    console.log('[HomeScreen] Delete pressed for patient:', patient.name, 'ID:', patient.id);
+    
+    // Show temporary toast/banner for debugging
+    Alert.alert(
+      'Debug',
+      `Delete pressed for: ${patient.name}`,
+      [{ text: 'OK' }]
+    );
+    
+    // Set patient to delete and show confirmation modal
+    setPatientToDelete(patient);
+    setDeleteModalVisible(true);
   };
 
-  const handleTestFAB = () => {
-    console.log('[HomeScreen] TEST FAB button pressed');
-    Alert.alert('FAB tap works', 'The TEST FAB button responded successfully!');
+  const confirmDelete = async () => {
+    if (!patientToDelete) {
+      console.error('[HomeScreen] No patient selected for deletion');
+      return;
+    }
+
+    console.log('[HomeScreen] ========== CONFIRM DELETE START ==========');
+    console.log('[HomeScreen] User confirmed deletion of:', patientToDelete.name, 'ID:', patientToDelete.id);
+    
+    setDeleting(true);
+    
+    try {
+      // STEP 1: Load current patients from storage
+      console.log('[HomeScreen] Loading patients from storage before delete');
+      const currentPatients = await getAllPatients();
+      console.log('[HomeScreen] Current patient count:', currentPatients.length);
+      console.log('[HomeScreen] Current patient IDs:', currentPatients.map(p => p.id).join(', '));
+      
+      // STEP 2: Delete patient by ID using localStorage utility
+      console.log('[HomeScreen] Calling deletePatient for ID:', patientToDelete.id);
+      await deletePatient(patientToDelete.id);
+      
+      // STEP 3: Verify deletion by reading back from storage
+      console.log('[HomeScreen] Verifying deletion...');
+      const verifyPatients = await getAllPatients();
+      console.log('[HomeScreen] Patient count after delete:', verifyPatients.length);
+      console.log('[HomeScreen] Remaining patient IDs:', verifyPatients.map(p => p.id).join(', '));
+      
+      const stillExists = verifyPatients.find(p => p.id === patientToDelete.id);
+      if (stillExists) {
+        console.error('[HomeScreen] VERIFICATION FAILED: Patient still exists after delete!');
+        throw new Error('Failed to verify patient was deleted');
+      }
+      
+      console.log('[HomeScreen] Verification SUCCESS: Patient deleted from storage');
+      
+      // STEP 4: Update local state immediately
+      console.log('[HomeScreen] Updating local state to remove deleted patient');
+      setPatients(verifyPatients);
+      
+      // STEP 5: Close modal and clear selection
+      setDeleteModalVisible(false);
+      setPatientToDelete(null);
+      
+      console.log('[HomeScreen] ========== CONFIRM DELETE END ==========');
+      
+      // Show success message
+      Alert.alert('Success', `${patientToDelete.name} has been deleted.`);
+      
+    } catch (error: any) {
+      console.error('[HomeScreen] Error deleting patient:', error);
+      Alert.alert(
+        'Delete Failed',
+        'Failed to delete patient from local storage. Please try again.',
+        [
+          { text: 'Retry', onPress: confirmDelete },
+          { text: 'Cancel', style: 'cancel' }
+        ]
+      );
+    } finally {
+      setDeleting(false);
+    }
+  };
+
+  const cancelDelete = () => {
+    console.log('[HomeScreen] User cancelled deletion');
+    setDeleteModalVisible(false);
+    setPatientToDelete(null);
   };
 
   const getAlertColor = (status: AlertStatus) => {
@@ -157,6 +248,96 @@ export default function HomeScreen() {
     return 'warning';
   };
 
+  const renderPatientCard = ({ item: patient }: { item: Patient }) => {
+    const alertColor = getAlertColor(patient.alertStatus);
+    const alertBgColor = getAlertBgColor(patient.alertStatus);
+    const alertBorderColor = getAlertBorderColor(patient.alertStatus);
+    const alertLabel = getAlertLabel(patient.alertStatus);
+    const alertIcon = getAlertIcon(patient.alertStatus);
+    const podText = `POD ${patient.postOpDay}`;
+    
+    const displayName = patient.name && patient.name.trim() ? patient.name : 'Unnamed Patient';
+    
+    const isManualStatus = patient.statusMode === 'manual';
+
+    return (
+      <View style={styles.patientCard}>
+        <TouchableOpacity
+          onPress={() => handlePatientPress(patient.id)}
+          activeOpacity={0.7}
+          style={styles.patientCardTouchable}
+        >
+          <View style={[styles.alertBar, { 
+            backgroundColor: alertBgColor,
+            borderLeftColor: alertColor,
+          }]}>
+            <IconSymbol
+              ios_icon_name="circle.fill"
+              android_material_icon_name={alertIcon}
+              size={10}
+              color={alertColor}
+            />
+            <Text style={[styles.alertLabel, { color: alertColor }]}>
+              {alertLabel}
+            </Text>
+            {isManualStatus && (
+              <View style={styles.manualBadge}>
+                <Text style={styles.manualBadgeText}>MANUAL</Text>
+              </View>
+            )}
+          </View>
+
+          <View style={styles.cardContent}>
+            <View style={styles.patientInfo}>
+              <Text style={styles.patientName}>{displayName}</Text>
+              
+              <View style={styles.metaRow}>
+                <View style={styles.podBadge}>
+                  <Text style={styles.podText}>{podText}</Text>
+                </View>
+                {patient.hospitalLocation && (
+                  <View style={styles.locationBadge}>
+                    <IconSymbol
+                      ios_icon_name="location"
+                      android_material_icon_name="location-on"
+                      size={9}
+                      color={colors.textMuted}
+                    />
+                    <Text style={styles.locationText}>{patient.hospitalLocation}</Text>
+                  </View>
+                )}
+              </View>
+              
+              <Text style={styles.procedureType}>{patient.procedureType}</Text>
+            </View>
+
+            <IconSymbol
+              ios_icon_name="chevron.right"
+              android_material_icon_name="chevron-right"
+              size={16}
+              color={colors.iconLight}
+              style={styles.chevron}
+            />
+          </View>
+        </TouchableOpacity>
+
+        {/* Delete button - positioned absolutely on the right side */}
+        <TouchableOpacity
+          style={styles.deleteButton}
+          onPress={() => requestDeletePatient(patient)}
+          hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+        >
+          <IconSymbol
+            ios_icon_name="trash"
+            android_material_icon_name="delete"
+            size={20}
+            color={colors.error}
+          />
+        </TouchableOpacity>
+      </View>
+    );
+  };
+
   const sortedPatients = sortPatients(patients, sortBy);
   const currentSortLabel = getSortLabel(sortBy);
   const patientCountText = `${sortedPatients.length}`;
@@ -185,203 +366,102 @@ export default function HomeScreen() {
           </View>
         </View>
 
-        <ScrollView
-          style={styles.scrollView}
-          contentContainerStyle={styles.scrollContent}
-          showsVerticalScrollIndicator={false}
-        >
-          {/* TEMPORARY TEST TAP BUTTON - Full width at top of content */}
-          <Pressable
-            onPress={handleTestTap}
-            style={({ pressed }) => [
-              styles.testTapButton,
-              pressed && styles.testTapButtonPressed
-            ]}
-          >
-            <Text style={styles.testTapButtonText}>TEST TAP - Press to verify touch works</Text>
-          </Pressable>
-
-          <View style={styles.listHeader}>
-            <View style={styles.listHeaderLeft}>
-              <Text style={styles.listTitle}>Patients</Text>
-              <View style={styles.countBadge}>
-                <Text style={styles.patientCount}>{patientCountText}</Text>
-              </View>
+        <View style={styles.listHeader}>
+          <View style={styles.listHeaderLeft}>
+            <Text style={styles.listTitle}>Patients</Text>
+            <View style={styles.countBadge}>
+              <Text style={styles.patientCount}>{patientCountText}</Text>
             </View>
-            
-            <TouchableOpacity
-              style={styles.sortButton}
-              onPress={() => {
-                console.log('[HomeScreen] User tapped sort button');
-                setShowSortMenu(!showSortMenu);
-              }}
-            >
+          </View>
+          
+          <TouchableOpacity
+            style={styles.sortButton}
+            onPress={() => {
+              console.log('[HomeScreen] User tapped sort button');
+              setShowSortMenu(!showSortMenu);
+            }}
+          >
+            <IconSymbol
+              ios_icon_name="arrow.up.arrow.down"
+              android_material_icon_name="sort"
+              size={14}
+              color={colors.iconSecondary}
+            />
+            <Text style={styles.sortButtonText}>{currentSortLabel}</Text>
+          </TouchableOpacity>
+        </View>
+
+        {showSortMenu && (
+          <View style={styles.sortMenu}>
+            {(['status', 'name', 'date', 'location'] as SortOption[]).map((option, index) => {
+              const label = getSortLabel(option);
+              const icon = getSortIcon(option);
+              const isActive = sortBy === option;
+              
+              return (
+                <React.Fragment key={index}>
+                  <TouchableOpacity
+                    style={[styles.sortMenuItem, isActive && styles.sortMenuItemActive]}
+                    onPress={() => {
+                      console.log('[HomeScreen] User selected sort option:', option);
+                      setSortBy(option);
+                      setShowSortMenu(false);
+                    }}
+                  >
+                    <IconSymbol
+                      ios_icon_name="checkmark"
+                      android_material_icon_name={icon}
+                      size={18}
+                      color={isActive ? colors.primary : colors.iconLight}
+                    />
+                    <Text style={[styles.sortMenuItemText, isActive && styles.sortMenuItemTextActive]}>
+                      {label}
+                    </Text>
+                  </TouchableOpacity>
+                </React.Fragment>
+              );
+            })}
+          </View>
+        )}
+
+        {loading ? (
+          <View style={styles.loadingContainer}>
+            <ActivityIndicator size="large" color={colors.primary} />
+            <Text style={styles.loadingText}>Loading patients...</Text>
+          </View>
+        ) : sortedPatients.length === 0 ? (
+          <View style={styles.emptyState}>
+            <View style={styles.emptyIconContainer}>
               <IconSymbol
-                ios_icon_name="arrow.up.arrow.down"
-                android_material_icon_name="sort"
-                size={14}
-                color={colors.iconSecondary}
+                ios_icon_name="person.badge.plus"
+                android_material_icon_name="person-add"
+                size={56}
+                color={colors.iconLight}
               />
-              <Text style={styles.sortButtonText}>{currentSortLabel}</Text>
+            </View>
+            <Text style={styles.emptyStateTitle}>No Patients Yet</Text>
+            <Text style={styles.emptyStateText}>
+              Add your first patient to start monitoring post-operative recovery
+            </Text>
+            <TouchableOpacity style={styles.addButton} onPress={handleAddPatient}>
+              <IconSymbol
+                ios_icon_name="plus"
+                android_material_icon_name="add"
+                size={20}
+                color="#FFFFFF"
+              />
+              <Text style={styles.addButtonText}>Add Patient</Text>
             </TouchableOpacity>
           </View>
-
-          {showSortMenu && (
-            <View style={styles.sortMenu}>
-              {(['status', 'name', 'date', 'location'] as SortOption[]).map((option, index) => {
-                const label = getSortLabel(option);
-                const icon = getSortIcon(option);
-                const isActive = sortBy === option;
-                
-                return (
-                  <React.Fragment key={index}>
-                    <TouchableOpacity
-                      style={[styles.sortMenuItem, isActive && styles.sortMenuItemActive]}
-                      onPress={() => {
-                        console.log('[HomeScreen] User selected sort option:', option);
-                        setSortBy(option);
-                        setShowSortMenu(false);
-                      }}
-                    >
-                      <IconSymbol
-                        ios_icon_name="checkmark"
-                        android_material_icon_name={icon}
-                        size={18}
-                        color={isActive ? colors.primary : colors.iconLight}
-                      />
-                      <Text style={[styles.sortMenuItemText, isActive && styles.sortMenuItemTextActive]}>
-                        {label}
-                      </Text>
-                    </TouchableOpacity>
-                  </React.Fragment>
-                );
-              })}
-            </View>
-          )}
-
-          {loading ? (
-            <View style={styles.loadingContainer}>
-              <ActivityIndicator size="large" color={colors.primary} />
-              <Text style={styles.loadingText}>Loading patients...</Text>
-            </View>
-          ) : sortedPatients.length === 0 ? (
-            <View style={styles.emptyState}>
-              <View style={styles.emptyIconContainer}>
-                <IconSymbol
-                  ios_icon_name="person.badge.plus"
-                  android_material_icon_name="person-add"
-                  size={56}
-                  color={colors.iconLight}
-                />
-              </View>
-              <Text style={styles.emptyStateTitle}>No Patients Yet</Text>
-              <Text style={styles.emptyStateText}>
-                Add your first patient to start monitoring post-operative recovery
-              </Text>
-              <TouchableOpacity style={styles.addButton} onPress={handleAddPatient}>
-                <IconSymbol
-                  ios_icon_name="plus"
-                  android_material_icon_name="add"
-                  size={20}
-                  color="#FFFFFF"
-                />
-                <Text style={styles.addButtonText}>Add Patient</Text>
-              </TouchableOpacity>
-            </View>
-          ) : (
-            <>
-              {sortedPatients.map((patient, index) => {
-                const alertColor = getAlertColor(patient.alertStatus);
-                const alertBgColor = getAlertBgColor(patient.alertStatus);
-                const alertBorderColor = getAlertBorderColor(patient.alertStatus);
-                const alertLabel = getAlertLabel(patient.alertStatus);
-                const alertIcon = getAlertIcon(patient.alertStatus);
-                const podText = `POD ${patient.postOpDay}`;
-                
-                const displayName = patient.name && patient.name.trim() ? patient.name : 'Unnamed Patient';
-                
-                const isManualStatus = patient.statusMode === 'manual';
-
-                return (
-                  <React.Fragment key={index}>
-                    <TouchableOpacity
-                      style={styles.patientCard}
-                      onPress={() => handlePatientPress(patient.id)}
-                      activeOpacity={0.7}
-                    >
-                      <View style={[styles.alertBar, { 
-                        backgroundColor: alertBgColor,
-                        borderLeftColor: alertColor,
-                      }]}>
-                        <IconSymbol
-                          ios_icon_name="circle.fill"
-                          android_material_icon_name={alertIcon}
-                          size={10}
-                          color={alertColor}
-                        />
-                        <Text style={[styles.alertLabel, { color: alertColor }]}>
-                          {alertLabel}
-                        </Text>
-                        {isManualStatus && (
-                          <View style={styles.manualBadge}>
-                            <Text style={styles.manualBadgeText}>MANUAL</Text>
-                          </View>
-                        )}
-                      </View>
-
-                      <View style={styles.cardContent}>
-                        <View style={styles.patientInfo}>
-                          <Text style={styles.patientName}>{displayName}</Text>
-                          
-                          <View style={styles.metaRow}>
-                            <View style={styles.podBadge}>
-                              <Text style={styles.podText}>{podText}</Text>
-                            </View>
-                            {patient.hospitalLocation && (
-                              <View style={styles.locationBadge}>
-                                <IconSymbol
-                                  ios_icon_name="location"
-                                  android_material_icon_name="location-on"
-                                  size={9}
-                                  color={colors.textMuted}
-                                />
-                                <Text style={styles.locationText}>{patient.hospitalLocation}</Text>
-                              </View>
-                            )}
-                          </View>
-                          
-                          <Text style={styles.procedureType}>{patient.procedureType}</Text>
-                        </View>
-
-                        <IconSymbol
-                          ios_icon_name="chevron.right"
-                          android_material_icon_name="chevron-right"
-                          size={16}
-                          color={colors.iconLight}
-                          style={styles.chevron}
-                        />
-                      </View>
-                    </TouchableOpacity>
-                  </React.Fragment>
-                );
-              })}
-            </>
-          )}
-
-          <View style={styles.bottomSpacer} />
-        </ScrollView>
-
-        {/* TEMPORARY TEST FAB - Top-left floating button */}
-        <Pressable
-          onPress={handleTestFAB}
-          style={({ pressed }) => [
-            styles.testFABButton,
-            pressed && styles.testFABButtonPressed
-          ]}
-          hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
-        >
-          <Text style={styles.testFABButtonText}>TEST FAB</Text>
-        </Pressable>
+        ) : (
+          <FlatList
+            data={sortedPatients}
+            renderItem={renderPatientCard}
+            keyExtractor={(item) => item.id}
+            contentContainerStyle={styles.listContent}
+            showsVerticalScrollIndicator={false}
+          />
+        )}
 
         {/* Real Add Patient FAB - Bottom-right */}
         <Pressable
@@ -399,6 +479,58 @@ export default function HomeScreen() {
             color="#FFFFFF"
           />
         </Pressable>
+
+        {/* Delete Confirmation Modal */}
+        <Modal
+          visible={deleteModalVisible}
+          transparent={true}
+          animationType="fade"
+          onRequestClose={cancelDelete}
+        >
+          <View style={styles.modalOverlay}>
+            <View style={styles.modalContent}>
+              <View style={styles.modalHeader}>
+                <IconSymbol
+                  ios_icon_name="exclamationmark.triangle.fill"
+                  android_material_icon_name="warning"
+                  size={48}
+                  color={colors.error}
+                />
+                <Text style={styles.modalTitle}>Delete patient?</Text>
+              </View>
+
+              <Text style={styles.modalBody}>
+                Delete {patientToDelete?.name || 'this patient'}?
+              </Text>
+
+              <Text style={styles.modalWarning}>
+                This will permanently delete all patient data including vitals, labs, and notes. This action cannot be undone.
+              </Text>
+
+              <View style={styles.modalActions}>
+                <TouchableOpacity
+                  style={styles.modalCancelButton}
+                  onPress={cancelDelete}
+                  disabled={deleting}
+                >
+                  <Text style={styles.modalCancelButtonText}>Cancel</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={[styles.modalDeleteButton, deleting && styles.modalDeleteButtonDisabled]}
+                  onPress={confirmDelete}
+                  disabled={deleting}
+                >
+                  {deleting ? (
+                    <ActivityIndicator color="#FFFFFF" size="small" />
+                  ) : (
+                    <Text style={styles.modalDeleteButtonText}>Delete</Text>
+                  )}
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        </Modal>
       </View>
     </SafeAreaView>
   );
@@ -459,60 +591,12 @@ const styles = StyleSheet.create({
     color: colors.primary,
     textAlign: 'center',
   },
-  scrollView: {
-    flex: 1,
-  },
-  scrollContent: {
-    paddingTop: spacing.xxl + spacing.sm,
-  },
-  testTapButton: {
-    backgroundColor: '#FF6B35',
-    marginHorizontal: spacing.xl,
-    marginBottom: spacing.lg,
-    paddingVertical: spacing.xl,
-    borderRadius: borderRadius.lg,
-    alignItems: 'center',
-    justifyContent: 'center',
-    ...shadows.lg,
-  },
-  testTapButtonPressed: {
-    opacity: 0.8,
-    transform: [{ scale: 0.98 }],
-  },
-  testTapButtonText: {
-    fontSize: typography.h3,
-    fontWeight: typography.bold,
-    color: '#FFFFFF',
-    textAlign: 'center',
-  },
-  testFABButton: {
-    position: 'absolute',
-    top: 24,
-    left: 24,
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.md,
-    borderRadius: borderRadius.lg,
-    backgroundColor: '#4ECDC4',
-    justifyContent: 'center',
-    alignItems: 'center',
-    zIndex: 9999,
-    elevation: 20,
-    ...shadows.lg,
-  },
-  testFABButtonPressed: {
-    opacity: 0.8,
-    transform: [{ scale: 0.95 }],
-  },
-  testFABButtonText: {
-    fontSize: typography.body,
-    fontWeight: typography.bold,
-    color: '#FFFFFF',
-  },
   listHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: spacing.xl,
+    marginTop: spacing.xxl + spacing.sm,
     marginBottom: spacing.lg + spacing.xs,
   },
   listHeaderLeft: {
@@ -642,6 +726,9 @@ const styles = StyleSheet.create({
     fontWeight: typography.bold,
     color: '#FFFFFF',
   },
+  listContent: {
+    paddingBottom: spacing.xxxxl * 2,
+  },
   patientCard: {
     backgroundColor: colors.card,
     marginHorizontal: spacing.xl,
@@ -651,6 +738,10 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
     overflow: 'hidden',
     ...shadows.sm,
+    position: 'relative',
+  },
+  patientCardTouchable: {
+    flex: 1,
   },
   alertBar: {
     flexDirection: 'row',
@@ -735,6 +826,17 @@ const styles = StyleSheet.create({
     opacity: 0.2,
     marginLeft: spacing.md,
   },
+  deleteButton: {
+    position: 'absolute',
+    top: spacing.md,
+    right: spacing.md,
+    padding: spacing.sm,
+    backgroundColor: colors.backgroundAlt,
+    borderRadius: borderRadius.full,
+    borderWidth: 1,
+    borderColor: colors.error,
+    zIndex: 10,
+  },
   fabButton: {
     position: 'absolute',
     bottom: 24,
@@ -753,7 +855,78 @@ const styles = StyleSheet.create({
     opacity: 0.8,
     transform: [{ scale: 0.95 }],
   },
-  bottomSpacer: {
-    height: spacing.xxxxl * 2,
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: spacing.xl,
+  },
+  modalContent: {
+    backgroundColor: colors.card,
+    borderRadius: borderRadius.xl,
+    padding: spacing.xxl,
+    width: '100%',
+    maxWidth: 400,
+    ...shadows.xl,
+  },
+  modalHeader: {
+    alignItems: 'center',
+    marginBottom: spacing.lg,
+    gap: spacing.md,
+  },
+  modalTitle: {
+    fontSize: typography.h3,
+    fontWeight: typography.bold,
+    color: colors.text,
+    textAlign: 'center',
+  },
+  modalBody: {
+    fontSize: typography.h4,
+    fontWeight: typography.semibold,
+    color: colors.text,
+    textAlign: 'center',
+    marginBottom: spacing.md,
+  },
+  modalWarning: {
+    fontSize: typography.bodySmall,
+    fontWeight: typography.regular,
+    color: colors.textSecondary,
+    textAlign: 'center',
+    lineHeight: 20,
+    marginBottom: spacing.xxl,
+  },
+  modalActions: {
+    flexDirection: 'row',
+    gap: spacing.md,
+  },
+  modalCancelButton: {
+    flex: 1,
+    backgroundColor: colors.backgroundAlt,
+    borderWidth: 2,
+    borderColor: colors.border,
+    borderRadius: borderRadius.lg,
+    paddingVertical: spacing.lg,
+    alignItems: 'center',
+  },
+  modalCancelButtonText: {
+    fontSize: typography.body,
+    fontWeight: typography.bold,
+    color: colors.text,
+  },
+  modalDeleteButton: {
+    flex: 1,
+    backgroundColor: colors.error,
+    borderRadius: borderRadius.lg,
+    paddingVertical: spacing.lg,
+    alignItems: 'center',
+  },
+  modalDeleteButtonDisabled: {
+    opacity: 0.6,
+  },
+  modalDeleteButtonText: {
+    fontSize: typography.body,
+    fontWeight: typography.bold,
+    color: '#FFFFFF',
   },
 });
