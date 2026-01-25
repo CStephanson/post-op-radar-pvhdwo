@@ -212,7 +212,7 @@ export async function getPatientById(patientId: string): Promise<Patient | null>
 /**
  * PRODUCTION-HARDENED: Save all patients to local storage
  */
-async function saveAllPatients(patients: Patient[]): Promise<void> {
+export async function saveAllPatients(patients: Patient[]): Promise<void> {
   try {
     console.log('[LocalStorage] ========== SAVE ALL PATIENTS START ==========');
     console.log('[LocalStorage] Saving', patients.length, 'patients to AsyncStorage');

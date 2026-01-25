@@ -16,8 +16,9 @@ import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { colors, typography, spacing, borderRadius, shadows } from '@/styles/commonStyles';
 import { IconSymbol } from '@/components/IconSymbol';
 import { Patient, AlertStatus, SortOption } from '@/types/patient';
-import { getAllPatients, deletePatient, updatePatient } from '@/utils/localStorage';
+import { getAllPatients, deletePatient } from '@/utils/localStorage';
 import { calculateAutoStatus } from '@/utils/autoStatus';
+import React from 'react';
 
 export default function HomeScreen() {
   const navigation = useNavigation();
@@ -130,9 +131,24 @@ export default function HomeScreen() {
     return sorted;
   };
 
-  const handlePatientPress = (patientId: string) => {
-    console.log('[HomeScreen] User tapped patient card, navigating to PatientDetail with patientId:', patientId);
-    navigation.navigate('PatientDetail' as never, { patientId } as never);
+  const handlePatientPress = (patient: Patient) => {
+    console.log('[HomeScreen] ========== NAVIGATION START ==========');
+    console.log('[HomeScreen] User tapped patient card:', patient.name);
+    console.log('[HomeScreen] Patient patientId:', patient.patientId, '| Type:', typeof patient.patientId);
+    
+    // CRITICAL: Ensure patientId is always a string
+    const patientIdString = String(patient.patientId);
+    
+    console.log('[HomeScreen] Navigating with patientId (string):', patientIdString);
+    console.log('[HomeScreen] Passing full patient object:', !!patient);
+    
+    // CRITICAL: Pass BOTH patientId (as string) AND full patient object
+    navigation.navigate('PatientDetail' as never, { 
+      patientId: patientIdString,
+      patient: patient,
+    } as never);
+    
+    console.log('[HomeScreen] ========== NAVIGATION END ==========');
   };
 
   const handleAddPatient = () => {
@@ -249,7 +265,7 @@ export default function HomeScreen() {
     return (
       <View style={styles.patientCard}>
         <TouchableOpacity
-          onPress={() => handlePatientPress(patient.patientId)}
+          onPress={() => handlePatientPress(patient)}
           activeOpacity={0.7}
           style={styles.patientCardTouchable}
         >

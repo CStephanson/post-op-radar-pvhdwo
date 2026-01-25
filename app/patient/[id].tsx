@@ -20,17 +20,22 @@ import { colors, typography, spacing, borderRadius, shadows } from '@/styles/com
 import { IconSymbol } from '@/components/IconSymbol';
 import { Patient, Alert as PatientAlert, AlertStatus, TrendData, VitalEntry, LabEntry } from '@/types/patient';
 import { calculateTrends, generateAlerts, calculateAlertStatus } from '@/utils/alertLogic';
-import { getPatientById, addVitalEntry, addLabEntry, deleteVitalEntry, deleteLabEntry } from '@/utils/localStorage';
+import { getAllPatients, getPatientById, addVitalEntry, addLabEntry, deleteVitalEntry, deleteLabEntry, saveAllPatients } from '@/utils/localStorage';
 import { CANADIAN_LAB_RANGES, CANADIAN_VITAL_RANGES, checkVitalAbnormalities, checkLabAbnormalities } from '@/utils/canadianUnits';
 import { calculateAutoStatus } from '@/utils/autoStatus';
 
 export default function PatientDetailScreen({ route, navigation }: any) {
-  // CRITICAL: Read patientId from route params
-  const { patientId } = route.params;
+  // CRITICAL: Read BOTH patientId AND patient object from route params
+  const { patientId, patient: routePatient } = route.params || {};
   
-  console.log('[PatientDetail] Screen mounted with patientId:', patientId);
+  console.log('[PatientDetail] ========== SCREEN MOUNTED ==========');
+  console.log('[PatientDetail] Route patientId:', patientId);
+  console.log('[PatientDetail] Route has patient object:', !!routePatient);
+  if (routePatient) {
+    console.log('[PatientDetail] Route patient name:', routePatient.name, '| patientId:', routePatient.patientId);
+  }
   
-  const [patient, setPatient] = useState<Patient | null>(null);
+  const [patient, setPatient] = useState<Patient | null>(routePatient || null);
   const [alerts, setAlerts] = useState<PatientAlert[]>([]);
   const [trends, setTrends] = useState<TrendData[]>([]);
   const [editModalVisible, setEditModalVisible] = useState(false);
@@ -38,7 +43,9 @@ export default function PatientDetailScreen({ route, navigation }: any) {
   const [deleteModalVisible, setDeleteModalVisible] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<{ type: 'vitals' | 'labs', id: string, timestamp: string } | null>(null);
   const [loadError, setLoadError] = useState(false);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(!routePatient);
+  const [showDebug, setShowDebug] = useState(false);
+  const [debugInfo, setDebugInfo] = useState<any>(null);
   
   // Edit form state for vitals
   const [editHr, setEditHr] = useState('');
@@ -65,39 +72,89 @@ export default function PatientDetailScreen({ route, navigation }: any) {
   const [editInr, setEditInr] = useState('');
   const [editLabNotes, setEditLabNotes] = useState('');
 
-  const loadPatientData = useCallback(async () => {
+  // CRITICAL: Background reconciliation with storage
+  const reconcileWithStorage = useCallback(async () => {
     try {
-      console.log('[PatientDetail] Loading patient data for patientId:', patientId);
-      setLoading(true);
-      setLoadError(false);
+      console.log('[PatientDetail] ========== RECONCILIATION START ==========');
+      console.log('[PatientDetail] Reconciling patientId:', patientId);
       
-      // CRITICAL: Load from storage using patientId
-      const patientData = await getPatientById(patientId as string);
+      const allPatients = await getAllPatients();
+      console.log('[PatientDetail] Loaded', allPatients.length, 'patients from storage');
       
-      if (!patientData) {
-        console.log('[PatientDetail] Patient NOT FOUND with patientId:', patientId);
-        setLoadError(true);
-        setLoading(false);
-        return;
+      // Build debug info
+      const debugData = {
+        routePatientId: patientId,
+        routePatientIdType: typeof patientId,
+        hasRoutePatient: !!routePatient,
+        storageKey: 'opmgmt_patients_v1',
+        loadedPatientsCount: allPatients.length,
+        firstThreePatientIds: allPatients.slice(0, 3).map(p => p.patientId).join(', '),
+        allPatientIds: allPatients.map(p => p.patientId),
+        matchFound: false,
+      };
+      
+      // Try to find patient in storage
+      const storedPatient = allPatients.find(p => String(p.patientId) === String(patientId));
+      
+      if (storedPatient) {
+        console.log('[PatientDetail] FOUND patient in storage:', storedPatient.name);
+        debugData.matchFound = true;
+        setPatient(storedPatient);
+        updatePatientAnalysis(storedPatient);
+        setLoadError(false);
+      } else {
+        console.log('[PatientDetail] Patient NOT FOUND in storage');
+        
+        // If we have routePatient but it's not in storage, upsert it
+        if (routePatient) {
+          console.log('[PatientDetail] Upserting route patient into storage');
+          
+          // Ensure patientId is set correctly
+          const patientToUpsert = {
+            ...routePatient,
+            patientId: String(patientId),
+            updatedAt: new Date(),
+          };
+          
+          const updatedPatients = [...allPatients, patientToUpsert];
+          await saveAllPatients(updatedPatients);
+          
+          console.log('[PatientDetail] Patient upserted successfully');
+          setPatient(patientToUpsert);
+          updatePatientAnalysis(patientToUpsert);
+          setLoadError(false);
+        } else {
+          console.log('[PatientDetail] No route patient to upsert - showing error');
+          setLoadError(true);
+        }
       }
       
-      console.log('[PatientDetail] Patient loaded successfully:', patientData.name, '| patientId:', patientData.patientId);
-      console.log('[PatientDetail] Patient has', patientData.vitalEntries?.length || 0, 'vital entries and', patientData.labEntries?.length || 0, 'lab entries');
-      
-      setPatient(patientData);
-      updatePatientAnalysis(patientData);
-      setLoadError(false);
+      setDebugInfo(debugData);
+      console.log('[PatientDetail] ========== RECONCILIATION END ==========');
     } catch (error: any) {
-      console.error('[PatientDetail] Error loading patient data:', error);
+      console.error('[PatientDetail] Error during reconciliation:', error);
       setLoadError(true);
     } finally {
       setLoading(false);
     }
-  }, [patientId]);
+  }, [patientId, routePatient]);
 
   useEffect(() => {
-    loadPatientData();
-  }, [loadPatientData]);
+    // If we have routePatient, render immediately and reconcile in background
+    if (routePatient) {
+      console.log('[PatientDetail] Using route patient immediately:', routePatient.name);
+      setPatient(routePatient);
+      updatePatientAnalysis(routePatient);
+      setLoading(false);
+      
+      // Reconcile in background
+      reconcileWithStorage();
+    } else {
+      // No route patient, must load from storage
+      console.log('[PatientDetail] No route patient, loading from storage');
+      reconcileWithStorage();
+    }
+  }, [routePatient, reconcileWithStorage]);
 
   const updatePatientAnalysis = (updatedPatient: Patient) => {
     const patientTrends = calculateTrends(updatedPatient);
@@ -279,8 +336,15 @@ export default function PatientDetailScreen({ route, navigation }: any) {
     setDeleteTarget(null);
   };
 
-  // HARDENED: Show friendly error message if patient not found
+  // HARDENED: Show debug panel with detailed mismatch info
   if (loadError) {
+    const routePatientIdStr = String(patientId || 'undefined');
+    const hasRoutePatientStr = routePatient ? 'yes' : 'no';
+    const storageKeyStr = 'opmgmt_patients_v1';
+    const loadedCountStr = debugInfo ? String(debugInfo.loadedPatientsCount) : 'unknown';
+    const firstThreeIdsStr = debugInfo ? debugInfo.firstThreePatientIds : 'unknown';
+    const matchFoundStr = debugInfo ? (debugInfo.matchFound ? 'yes' : 'no') : 'unknown';
+
     return (
       <SafeAreaView style={styles.safeArea}>
         <View style={styles.errorContainer}>
@@ -294,6 +358,35 @@ export default function PatientDetailScreen({ route, navigation }: any) {
           <Text style={styles.errorMessage}>
             This patient could not be loaded from local storage. The patient may have been deleted or the data may be corrupted.
           </Text>
+
+          <View style={styles.debugPanel}>
+            <Text style={styles.debugTitle}>Debug Information</Text>
+            <View style={styles.debugRow}>
+              <Text style={styles.debugLabel}>Route patientId:</Text>
+              <Text style={styles.debugValue}>{routePatientIdStr}</Text>
+            </View>
+            <View style={styles.debugRow}>
+              <Text style={styles.debugLabel}>Route has patient object:</Text>
+              <Text style={styles.debugValue}>{hasRoutePatientStr}</Text>
+            </View>
+            <View style={styles.debugRow}>
+              <Text style={styles.debugLabel}>Storage key used:</Text>
+              <Text style={styles.debugValue}>{storageKeyStr}</Text>
+            </View>
+            <View style={styles.debugRow}>
+              <Text style={styles.debugLabel}>Loaded patients count:</Text>
+              <Text style={styles.debugValue}>{loadedCountStr}</Text>
+            </View>
+            <View style={styles.debugRow}>
+              <Text style={styles.debugLabel}>First 3 patientIds:</Text>
+              <Text style={styles.debugValue}>{firstThreeIdsStr}</Text>
+            </View>
+            <View style={styles.debugRow}>
+              <Text style={styles.debugLabel}>Match found:</Text>
+              <Text style={styles.debugValue}>{matchFoundStr}</Text>
+            </View>
+          </View>
+
           <TouchableOpacity
             style={styles.errorButton}
             onPress={() => navigation.goBack()}
@@ -302,7 +395,7 @@ export default function PatientDetailScreen({ route, navigation }: any) {
           </TouchableOpacity>
           <TouchableOpacity
             style={styles.errorRetryButton}
-            onPress={loadPatientData}
+            onPress={reconcileWithStorage}
           >
             <Text style={styles.errorRetryButtonText}>Retry</Text>
           </TouchableOpacity>
@@ -1428,6 +1521,41 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
     textAlign: 'center',
     lineHeight: 24,
+  },
+  debugPanel: {
+    backgroundColor: colors.backgroundAlt,
+    borderRadius: borderRadius.md,
+    padding: spacing.lg,
+    width: '100%',
+    marginTop: spacing.lg,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  debugTitle: {
+    fontSize: typography.bodySmall,
+    fontWeight: typography.bold,
+    color: colors.text,
+    marginBottom: spacing.md,
+  },
+  debugRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingVertical: spacing.xs,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.borderLight,
+  },
+  debugLabel: {
+    fontSize: typography.caption,
+    fontWeight: typography.semibold,
+    color: colors.textSecondary,
+    flex: 1,
+  },
+  debugValue: {
+    fontSize: typography.caption,
+    fontWeight: typography.regular,
+    color: colors.text,
+    flex: 1,
+    textAlign: 'right',
   },
   errorButton: {
     backgroundColor: colors.primary,
