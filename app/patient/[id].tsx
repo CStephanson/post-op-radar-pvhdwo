@@ -33,6 +33,8 @@ export default function PatientDetailScreen({ route, navigation }: any) {
   const [editType, setEditType] = useState<'vitals' | 'labs'>('vitals');
   const [deleteModalVisible, setDeleteModalVisible] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<{ type: 'vitals' | 'labs', id: string, timestamp: string } | null>(null);
+  const [loadError, setLoadError] = useState(false);
+  const [loading, setLoading] = useState(true);
   
   // Edit form state for vitals
   const [editHr, setEditHr] = useState('');
@@ -61,25 +63,30 @@ export default function PatientDetailScreen({ route, navigation }: any) {
 
   const loadPatientData = useCallback(async () => {
     try {
+      console.log('[PatientDetail] Loading patient data for ID:', id);
+      setLoading(true);
+      setLoadError(false);
+      
       const patientData = await getPatientById(id as string);
       
       if (!patientData) {
-        Alert.alert('Error', 'Patient not found', [
-          { text: 'OK', onPress: () => navigation.goBack() }
-        ]);
+        console.log('[PatientDetail] Patient not found with ID:', id);
+        setLoadError(true);
+        setLoading(false);
         return;
       }
       
+      console.log('[PatientDetail] Patient loaded successfully:', patientData.name);
       setPatient(patientData);
       updatePatientAnalysis(patientData);
+      setLoadError(false);
     } catch (error: any) {
       console.error('[PatientDetail] Error loading patient data:', error);
-      Alert.alert('Storage Error', 'Failed to load patient data from local storage', [
-        { text: 'Retry', onPress: loadPatientData },
-        { text: 'Cancel', onPress: () => navigation.goBack() }
-      ]);
+      setLoadError(true);
+    } finally {
+      setLoading(false);
     }
-  }, [id, navigation]);
+  }, [id]);
 
   useEffect(() => {
     loadPatientData();
@@ -138,6 +145,8 @@ export default function PatientDetailScreen({ route, navigation }: any) {
     }
     
     try {
+      console.log('[PatientDetail] Saving', editType, 'entry for patient:', patient.name);
+      
       if (editType === 'vitals') {
         const hasValue = editHr || editBpSys || editBpDia || editRr || editTemp || editSpo2 || editUrineOutput || editPain;
         if (!hasValue) {
@@ -158,8 +167,10 @@ export default function PatientDetailScreen({ route, navigation }: any) {
           notes: editVitalNotes.trim() || undefined,
         };
         
+        console.log('[PatientDetail] Adding vital entry:', newVitalEntry);
         const updatedPatient = await addVitalEntry(patient.id, newVitalEntry);
         
+        console.log('[PatientDetail] Vital entry saved successfully');
         setPatient(updatedPatient);
         updatePatientAnalysis(updatedPatient);
         
@@ -187,8 +198,10 @@ export default function PatientDetailScreen({ route, navigation }: any) {
           notes: editLabNotes.trim() || undefined,
         };
         
+        console.log('[PatientDetail] Adding lab entry:', newLabEntry);
         const updatedPatient = await addLabEntry(patient.id, newLabEntry);
         
+        console.log('[PatientDetail] Lab entry saved successfully');
         setPatient(updatedPatient);
         updatePatientAnalysis(updatedPatient);
         
@@ -198,10 +211,14 @@ export default function PatientDetailScreen({ route, navigation }: any) {
       setEditModalVisible(false);
     } catch (error: any) {
       console.error('[PatientDetail] Error saving entry:', error);
-      Alert.alert('Storage Error', 'Failed to save data to local storage. Please try again.', [
-        { text: 'Retry', onPress: saveEdits },
-        { text: 'Cancel', style: 'cancel' }
-      ]);
+      Alert.alert(
+        'Storage Error', 
+        'Failed to save data to local storage. Please try again.',
+        [
+          { text: 'Retry', onPress: saveEdits },
+          { text: 'Cancel', style: 'cancel' }
+        ]
+      );
     }
   };
 
@@ -254,7 +271,39 @@ export default function PatientDetailScreen({ route, navigation }: any) {
     setDeleteTarget(null);
   };
 
-  if (!patient) {
+  // HARDENED: Show friendly error message if patient not found
+  if (loadError) {
+    return (
+      <SafeAreaView style={styles.safeArea}>
+        <View style={styles.errorContainer}>
+          <IconSymbol
+            ios_icon_name="exclamationmark.triangle.fill"
+            android_material_icon_name="warning"
+            size={64}
+            color={colors.error}
+          />
+          <Text style={styles.errorTitle}>Patient Not Found</Text>
+          <Text style={styles.errorMessage}>
+            This patient could not be loaded from local storage. The patient may have been deleted or the data may be corrupted.
+          </Text>
+          <TouchableOpacity
+            style={styles.errorButton}
+            onPress={() => navigation.goBack()}
+          >
+            <Text style={styles.errorButtonText}>Return to Dashboard</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.errorRetryButton}
+            onPress={loadPatientData}
+          >
+            <Text style={styles.errorRetryButtonText}>Retry</Text>
+          </TouchableOpacity>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  if (loading || !patient) {
     return (
       <SafeAreaView style={styles.safeArea}>
         <View style={styles.loadingContainer}>
@@ -402,7 +451,7 @@ export default function PatientDetailScreen({ route, navigation }: any) {
         label: 'Pain', 
         value: `${item.pain}`, 
         unit: '/10',
-        isAbnormal: false, // Pain is subjective, not flagged as abnormal
+        isAbnormal: false,
       });
     }
 
@@ -1349,6 +1398,51 @@ const styles = StyleSheet.create({
   },
   loadingText: {
     fontSize: typography.body,
+    color: colors.textSecondary,
+  },
+  errorContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: spacing.xxl,
+    gap: spacing.lg,
+  },
+  errorTitle: {
+    fontSize: typography.h2,
+    fontWeight: typography.bold,
+    color: colors.text,
+    textAlign: 'center',
+  },
+  errorMessage: {
+    fontSize: typography.body,
+    fontWeight: typography.regular,
+    color: colors.textSecondary,
+    textAlign: 'center',
+    lineHeight: 24,
+  },
+  errorButton: {
+    backgroundColor: colors.primary,
+    paddingHorizontal: spacing.xxl,
+    paddingVertical: spacing.lg,
+    borderRadius: borderRadius.lg,
+    marginTop: spacing.md,
+  },
+  errorButtonText: {
+    fontSize: typography.body,
+    fontWeight: typography.bold,
+    color: '#FFFFFF',
+  },
+  errorRetryButton: {
+    backgroundColor: colors.backgroundAlt,
+    paddingHorizontal: spacing.xl,
+    paddingVertical: spacing.md,
+    borderRadius: borderRadius.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  errorRetryButtonText: {
+    fontSize: typography.bodySmall,
+    fontWeight: typography.semibold,
     color: colors.textSecondary,
   },
   headerCard: {

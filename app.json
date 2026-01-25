@@ -1,7 +1,7 @@
 {
   "expo": {
-    "name": "OpMGMT",
-    "slug": "opmgmt",
+    "name": "Post-Op Radar",
+    "slug": "Post-Op Radar",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/natively-dark.png",
@@ -45,5 +45,5 @@
       "backendUrl": "https://c7s5pe83nw24vej7xawmm7k86rssuydu.app.specular.dev"
     }
   },
-  "scheme": "opmgmt"
+  "scheme": "Post-Op Radar"
 }
