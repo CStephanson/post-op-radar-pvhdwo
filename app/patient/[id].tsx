@@ -43,7 +43,8 @@ export default function PatientDetailScreen({ route, navigation }: any) {
   const [deleteModalVisible, setDeleteModalVisible] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<{ type: 'vitals' | 'labs', id: string, timestamp: string } | null>(null);
   const [loadError, setLoadError] = useState(false);
-  const [loading, setLoading] = useState(!routePatient);
+  // CRITICAL: Track AsyncStorage loading state separately
+  const [isLoadingPatients, setIsLoadingPatients] = useState(true);
   const [showDebug, setShowDebug] = useState(false);
   const [debugInfo, setDebugInfo] = useState<any>(null);
   
@@ -73,13 +74,18 @@ export default function PatientDetailScreen({ route, navigation }: any) {
   const [editLabNotes, setEditLabNotes] = useState('');
 
   // CRITICAL: Background reconciliation with storage
+  // MUST complete before evaluating patient existence
   const reconcileWithStorage = useCallback(async () => {
     try {
       console.log('[PatientDetail] ========== RECONCILIATION START ==========');
       console.log('[PatientDetail] Reconciling patientId:', patientId);
+      console.log('[PatientDetail] isLoadingPatients: true (AsyncStorage read starting)');
+      
+      setIsLoadingPatients(true);
       
       const allPatients = await getAllPatients();
       console.log('[PatientDetail] Loaded', allPatients.length, 'patients from storage');
+      console.log('[PatientDetail] AsyncStorage read complete');
       
       // Build debug info
       const debugData = {
@@ -130,24 +136,26 @@ export default function PatientDetailScreen({ route, navigation }: any) {
       }
       
       setDebugInfo(debugData);
+      console.log('[PatientDetail] isLoadingPatients: false (AsyncStorage read finished)');
       console.log('[PatientDetail] ========== RECONCILIATION END ==========');
     } catch (error: any) {
       console.error('[PatientDetail] Error during reconciliation:', error);
       setLoadError(true);
     } finally {
-      setLoading(false);
+      setIsLoadingPatients(false);
     }
   }, [patientId, routePatient]);
 
   useEffect(() => {
-    // If we have routePatient, render immediately and reconcile in background
+    // CRITICAL: Always reconcile with storage before evaluating patient existence
+    // If we have routePatient, render immediately but STILL wait for storage to load
     if (routePatient) {
       console.log('[PatientDetail] Using route patient immediately:', routePatient.name);
       setPatient(routePatient);
       updatePatientAnalysis(routePatient);
-      setLoading(false);
       
-      // Reconcile in background
+      // CRITICAL: Still reconcile with storage to ensure data consistency
+      // isLoadingPatients will remain true until reconciliation completes
       reconcileWithStorage();
     } else {
       // No route patient, must load from storage
@@ -336,8 +344,24 @@ export default function PatientDetailScreen({ route, navigation }: any) {
     setDeleteTarget(null);
   };
 
-  // HARDENED: Show debug panel with detailed mismatch info
-  if (loadError) {
+  // CRITICAL: Show loading state while AsyncStorage is being read
+  // DO NOT evaluate patient existence until isLoadingPatients === false
+  if (isLoadingPatients) {
+    console.log('[PatientDetail] Rendering loading state (AsyncStorage still loading)');
+    return (
+      <SafeAreaView style={styles.safeArea}>
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color={colors.primary} />
+          <Text style={styles.loadingText}>Loading patient data...</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  // CRITICAL: Only show "Patient Not Found" AFTER storage has finished loading
+  // AND patient is still not found
+  if (loadError || !patient) {
+    console.log('[PatientDetail] Rendering error state (storage loaded, patient not found)');
     const routePatientIdStr = String(patientId || 'undefined');
     const hasRoutePatientStr = routePatient ? 'yes' : 'no';
     const storageKeyStr = 'opmgmt_patients_v1';
@@ -385,6 +409,10 @@ export default function PatientDetailScreen({ route, navigation }: any) {
               <Text style={styles.debugLabel}>Match found:</Text>
               <Text style={styles.debugValue}>{matchFoundStr}</Text>
             </View>
+            <View style={styles.debugRow}>
+              <Text style={styles.debugLabel}>Storage loaded:</Text>
+              <Text style={styles.debugValue}>yes</Text>
+            </View>
           </View>
 
           <TouchableOpacity
@@ -399,18 +427,6 @@ export default function PatientDetailScreen({ route, navigation }: any) {
           >
             <Text style={styles.errorRetryButtonText}>Retry</Text>
           </TouchableOpacity>
-        </View>
-      </SafeAreaView>
-    );
-  }
-
-  // HARDENED: Show loading state while fetching from storage
-  if (loading || !patient) {
-    return (
-      <SafeAreaView style={styles.safeArea}>
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={colors.primary} />
-          <Text style={styles.loadingText}>Loading patient data...</Text>
         </View>
       </SafeAreaView>
     );
