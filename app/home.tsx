@@ -58,6 +58,8 @@ export default function HomeScreen() {
         const updatedPatient = {
           ...patient,
           computedStatus: autoStatusResult.status,
+          abnormalCount: autoStatusResult.abnormalCount,
+          mostRecentAbnormalTimestamp: autoStatusResult.mostRecentAbnormalTimestamp,
         };
         
         // If in auto mode, update alertStatus
@@ -120,8 +122,42 @@ export default function HomeScreen() {
         return locA.localeCompare(locB);
       });
     } else if (sortOption === 'status') {
+      // Priority-based sorting with Red patients prioritized by abnormalCount
       const statusOrder = { red: 0, yellow: 1, green: 2 };
-      sorted.sort((a, b) => statusOrder[a.alertStatus] - statusOrder[b.alertStatus]);
+      sorted.sort((a, b) => {
+        // Primary: Sort by status (Red > Yellow > Green)
+        const statusDiff = statusOrder[a.alertStatus] - statusOrder[b.alertStatus];
+        if (statusDiff !== 0) {
+          return statusDiff;
+        }
+        
+        // Secondary: Within Red group, sort by abnormalCount descending (highest first)
+        if (a.alertStatus === 'red' && b.alertStatus === 'red') {
+          const abnormalCountA = a.abnormalCount || 0;
+          const abnormalCountB = b.abnormalCount || 0;
+          
+          if (abnormalCountA !== abnormalCountB) {
+            console.log('[HomeScreen] Sorting Red patients:', a.name, 'abnormalCount:', abnormalCountA, 'vs', b.name, 'abnormalCount:', abnormalCountB);
+            return abnormalCountB - abnormalCountA; // Descending order
+          }
+          
+          // Tertiary: If tie, sort by most recent abnormal timestamp descending
+          const timestampA = a.mostRecentAbnormalTimestamp ? new Date(a.mostRecentAbnormalTimestamp).getTime() : 0;
+          const timestampB = b.mostRecentAbnormalTimestamp ? new Date(b.mostRecentAbnormalTimestamp).getTime() : 0;
+          
+          if (timestampA !== timestampB) {
+            console.log('[HomeScreen] Sorting Red patients by timestamp:', a.name, 'timestamp:', timestampA, 'vs', b.name, 'timestamp:', timestampB);
+            return timestampB - timestampA; // Most recent first
+          }
+          
+          // Quaternary: If still tied, sort alphabetically by name
+          console.log('[HomeScreen] Sorting Red patients alphabetically:', a.name, 'vs', b.name);
+          return a.name.localeCompare(b.name);
+        }
+        
+        // For Yellow and Green groups, maintain existing order (no sub-sorting)
+        return 0;
+      });
     }
     
     return sorted;
@@ -273,6 +309,9 @@ export default function HomeScreen() {
     const displayName = patient.name && patient.name.trim() ? patient.name : 'Unnamed Patient';
     
     const isManualStatus = patient.statusMode === 'manual';
+    const isRedStatus = patient.alertStatus === 'red';
+    const abnormalCountValue = patient.abnormalCount || 0;
+    const abnormalCountText = `Abnormal: ${abnormalCountValue}`;
 
     return (
       <View style={styles.patientCard}>
@@ -297,6 +336,11 @@ export default function HomeScreen() {
             {isManualStatus && (
               <View style={styles.manualBadge}>
                 <Text style={styles.manualBadgeText}>MANUAL</Text>
+              </View>
+            )}
+            {isRedStatus && abnormalCountValue > 0 && (
+              <View style={styles.abnormalBadge}>
+                <Text style={styles.abnormalBadgeText}>{abnormalCountText}</Text>
               </View>
             )}
           </View>
@@ -764,6 +808,21 @@ const styles = StyleSheet.create({
     fontWeight: typography.bold,
     color: '#FFFFFF',
     letterSpacing: 0.6,
+  },
+  abnormalBadge: {
+    marginLeft: spacing.sm,
+    paddingHorizontal: spacing.sm + 1,
+    paddingVertical: 2,
+    backgroundColor: 'rgba(220, 38, 38, 0.12)',
+    borderRadius: borderRadius.xs,
+    borderWidth: 1,
+    borderColor: 'rgba(220, 38, 38, 0.2)',
+  },
+  abnormalBadgeText: {
+    fontSize: 9,
+    fontWeight: typography.semibold,
+    color: colors.alertRed,
+    letterSpacing: 0.3,
   },
   cardContent: {
     flexDirection: 'row',

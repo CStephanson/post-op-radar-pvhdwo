@@ -163,6 +163,8 @@ export async function createPatient(patientData: Omit<Patient, 'id' | 'userId' |
       // Initialize status mode to auto
       statusMode: 'auto',
       computedStatus: 'green',
+      abnormalCount: 0,
+      mostRecentAbnormalTimestamp: undefined,
     };
     
     console.log('[LocalStorage] New patient object created with ID:', newPatient.id, 'Name:', newPatient.name);
@@ -231,11 +233,13 @@ export async function updatePatient(id: string, patientData: Partial<Patient>): 
     // Recalculate auto-status
     const autoStatusResult = calculateAutoStatus(updatedPatient);
     updatedPatient.computedStatus = autoStatusResult.status;
+    updatedPatient.abnormalCount = autoStatusResult.abnormalCount;
+    updatedPatient.mostRecentAbnormalTimestamp = autoStatusResult.mostRecentAbnormalTimestamp;
     
     // If in auto mode, update alertStatus
     if (updatedPatient.statusMode !== 'manual') {
       updatedPatient.alertStatus = autoStatusResult.status;
-      console.log('[LocalStorage] Auto-status updated to:', autoStatusResult.status);
+      console.log('[LocalStorage] Auto-status updated to:', autoStatusResult.status, '| Abnormalities:', autoStatusResult.abnormalCount);
     }
     
     console.log('[LocalStorage] Updated patient name:', updatedPatient.name);

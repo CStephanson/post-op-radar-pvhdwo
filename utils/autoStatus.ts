@@ -12,6 +12,7 @@ export interface AutoStatusResult {
   abnormalCount: number;
   abnormalities: AbnormalValue[];
   summary: string;
+  mostRecentAbnormalTimestamp?: Date;
 }
 
 /**
@@ -26,6 +27,7 @@ export function calculateAutoStatus(patient: Patient): AutoStatusResult {
   console.log('[AutoStatus] Calculating auto-status for patient:', patient.name);
   
   const allAbnormalities: AbnormalValue[] = [];
+  let mostRecentAbnormalTimestamp: Date | undefined;
   
   // Check most recent vital entry
   if (patient.vitalEntries && patient.vitalEntries.length > 0) {
@@ -38,7 +40,13 @@ export function calculateAutoStatus(patient: Patient): AutoStatusResult {
     const vitalAbnormalities = checkVitalAbnormalities(latestVital);
     console.log('[AutoStatus] Found', vitalAbnormalities.length, 'vital abnormalities');
     
-    allAbnormalities.push(...vitalAbnormalities);
+    if (vitalAbnormalities.length > 0) {
+      allAbnormalities.push(...vitalAbnormalities);
+      const vitalTimestamp = new Date(latestVital.timestamp);
+      if (!mostRecentAbnormalTimestamp || vitalTimestamp > mostRecentAbnormalTimestamp) {
+        mostRecentAbnormalTimestamp = vitalTimestamp;
+      }
+    }
   }
   
   // Check most recent lab entry
@@ -52,11 +60,18 @@ export function calculateAutoStatus(patient: Patient): AutoStatusResult {
     const labAbnormalities = checkLabAbnormalities(latestLab);
     console.log('[AutoStatus] Found', labAbnormalities.length, 'lab abnormalities');
     
-    allAbnormalities.push(...labAbnormalities);
+    if (labAbnormalities.length > 0) {
+      allAbnormalities.push(...labAbnormalities);
+      const labTimestamp = new Date(latestLab.timestamp);
+      if (!mostRecentAbnormalTimestamp || labTimestamp > mostRecentAbnormalTimestamp) {
+        mostRecentAbnormalTimestamp = labTimestamp;
+      }
+    }
   }
   
   const abnormalCount = allAbnormalities.length;
   console.log('[AutoStatus] Total abnormalities:', abnormalCount);
+  console.log('[AutoStatus] Most recent abnormal timestamp:', mostRecentAbnormalTimestamp?.toLocaleString() || 'none');
   
   // Determine status based on abnormal count
   let status: AlertStatus;
@@ -84,6 +99,7 @@ export function calculateAutoStatus(patient: Patient): AutoStatusResult {
     abnormalCount,
     abnormalities: allAbnormalities,
     summary,
+    mostRecentAbnormalTimestamp,
   };
 }
 

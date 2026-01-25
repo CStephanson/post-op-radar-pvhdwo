@@ -87,6 +87,10 @@ export interface Patient {
   manualStatus?: AlertStatus; // User-selected status when statusMode is 'manual'
   computedStatus?: AlertStatus; // Auto-calculated status for reference
   
+  // Priority sorting fields (for Red status patients)
+  abnormalCount?: number; // Number of out-of-range values
+  mostRecentAbnormalTimestamp?: Date; // Timestamp of most recent abnormal value
+  
   // Operation details
   preOpDiagnosis?: string;
   postOpDiagnosis?: string;
