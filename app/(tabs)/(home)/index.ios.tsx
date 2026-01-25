@@ -1,5 +1,5 @@
 
-import React, { useState, useCallback } from 'react';
+import { useState, useCallback } from 'react';
 import {
   View,
   Text,
@@ -20,7 +20,6 @@ import { getAllPatients, deletePatient, updatePatient } from '@/utils/localStora
 import { calculateAutoStatus } from '@/utils/autoStatus';
 
 export default function HomeScreen() {
-  console.log('[HomeScreen] Component rendered');
   const navigation = useNavigation();
   const [patients, setPatients] = useState<Patient[]>([]);
   const [loading, setLoading] = useState(true);
@@ -31,27 +30,17 @@ export default function HomeScreen() {
   const [deleting, setDeleting] = useState(false);
 
   const loadPatients = useCallback(async () => {
-    console.log('[HomeScreen] ========== LOAD PATIENTS START ==========');
-    console.log('[HomeScreen] Loading patients from local storage');
     setLoading(true);
     try {
       const patientsData = await getAllPatients();
-      console.log('[HomeScreen] Loaded', patientsData.length, 'patients from local storage');
-      console.log('[HomeScreen] Patient IDs:', patientsData.map(p => p.id).join(', '));
-      console.log('[HomeScreen] Patient names:', patientsData.map(p => p.name).join(', '));
       
-      // CRITICAL: Ensure all patients have unique IDs
       const patientsWithIds = patientsData.map(p => {
         if (!p.id) {
-          console.error('[HomeScreen] Patient missing ID! Name:', p.name);
-          // Generate a unique ID if missing
           return { ...p, id: `patient_${Date.now()}_${Math.random().toString(36).substr(2, 9)}` };
         }
         return p;
       });
       
-      // Recalculate auto-status for all patients
-      console.log('[HomeScreen] Recalculating auto-status for all patients');
       const patientsWithAutoStatus = patientsWithIds.map(patient => {
         const autoStatusResult = calculateAutoStatus(patient);
         const updatedPatient = {
@@ -61,19 +50,14 @@ export default function HomeScreen() {
           mostRecentAbnormalTimestamp: autoStatusResult.mostRecentAbnormalTimestamp,
         };
         
-        // If in auto mode, update alertStatus
         if (updatedPatient.statusMode !== 'manual') {
           updatedPatient.alertStatus = autoStatusResult.status;
         }
-        
-        console.log('[HomeScreen] Patient:', patient.name, '| Auto-status:', autoStatusResult.status, '| Abnormalities:', autoStatusResult.abnormalCount);
         
         return updatedPatient;
       });
       
       setPatients(patientsWithAutoStatus);
-      console.log('[HomeScreen] State updated with', patientsWithAutoStatus.length, 'patients');
-      console.log('[HomeScreen] ========== LOAD PATIENTS END ==========');
     } catch (err: any) {
       console.error('[HomeScreen] Error loading patients:', err);
       Alert.alert(
@@ -95,10 +79,8 @@ export default function HomeScreen() {
     }
   }, []);
 
-  // Refresh patient list when screen comes into focus (e.g., after adding/editing a patient)
   useFocusEffect(
     useCallback(() => {
-      console.log('[HomeScreen] Screen focused - refreshing patient list');
       loadPatients();
     }, [loadPatients])
   );
@@ -121,40 +103,31 @@ export default function HomeScreen() {
         return locA.localeCompare(locB);
       });
     } else if (sortOption === 'status') {
-      // Priority-based sorting with Red patients prioritized by abnormalCount
       const statusOrder = { red: 0, yellow: 1, green: 2 };
       sorted.sort((a, b) => {
-        // Primary: Sort by status (Red > Yellow > Green)
         const statusDiff = statusOrder[a.alertStatus] - statusOrder[b.alertStatus];
         if (statusDiff !== 0) {
           return statusDiff;
         }
         
-        // Secondary: Within Red group, sort by abnormalCount descending (highest first)
         if (a.alertStatus === 'red' && b.alertStatus === 'red') {
           const abnormalCountA = a.abnormalCount || 0;
           const abnormalCountB = b.abnormalCount || 0;
           
           if (abnormalCountA !== abnormalCountB) {
-            console.log('[HomeScreen] Sorting Red patients:', a.name, 'abnormalCount:', abnormalCountA, 'vs', b.name, 'abnormalCount:', abnormalCountB);
-            return abnormalCountB - abnormalCountA; // Descending order
+            return abnormalCountB - abnormalCountA;
           }
           
-          // Tertiary: If tie, sort by most recent abnormal timestamp descending
           const timestampA = a.mostRecentAbnormalTimestamp ? new Date(a.mostRecentAbnormalTimestamp).getTime() : 0;
           const timestampB = b.mostRecentAbnormalTimestamp ? new Date(b.mostRecentAbnormalTimestamp).getTime() : 0;
           
           if (timestampA !== timestampB) {
-            console.log('[HomeScreen] Sorting Red patients by timestamp:', a.name, 'timestamp:', timestampA, 'vs', b.name, 'timestamp:', timestampB);
-            return timestampB - timestampA; // Most recent first
+            return timestampB - timestampA;
           }
           
-          // Quaternary: If still tied, sort alphabetically by name
-          console.log('[HomeScreen] Sorting Red patients alphabetically:', a.name, 'vs', b.name);
           return a.name.localeCompare(b.name);
         }
         
-        // For Yellow and Green groups, maintain existing order (no sub-sorting)
         return 0;
       });
     }
@@ -163,73 +136,39 @@ export default function HomeScreen() {
   };
 
   const handlePatientPress = (patientId: string) => {
-    console.log('[HomeScreen] User tapped patient card:', patientId);
     navigation.navigate('PatientDetail' as never, { id: patientId } as never);
   };
 
   const handleAddPatient = () => {
-    console.log('[HomeScreen] ========== ADD PATIENT BUTTON PRESSED ==========');
-    console.log('[HomeScreen] User tapped Add Patient button');
-    console.log('[HomeScreen] Navigating to AddPatient screen using React Navigation');
     navigation.navigate('AddPatient' as never);
   };
 
   const requestDeletePatient = (patient: Patient) => {
-    console.log('[HomeScreen] ========== DELETE BUTTON PRESSED ==========');
-    console.log('[HomeScreen] Delete pressed for patient:', patient.name, 'ID:', patient.id);
-    
-    // Set patient to delete and show confirmation modal
     setPatientToDelete(patient);
     setDeleteModalVisible(true);
   };
 
   const confirmDelete = async () => {
     if (!patientToDelete) {
-      console.error('[HomeScreen] No patient selected for deletion');
       return;
     }
-
-    console.log('[HomeScreen] ========== CONFIRM DELETE START ==========');
-    console.log('[HomeScreen] User confirmed deletion of:', patientToDelete.name, 'ID:', patientToDelete.id);
     
     setDeleting(true);
     
     try {
-      // STEP 1: Load current patients from storage
-      console.log('[HomeScreen] Loading patients from storage before delete');
-      const currentPatients = await getAllPatients();
-      console.log('[HomeScreen] Current patient count:', currentPatients.length);
-      console.log('[HomeScreen] Current patient IDs:', currentPatients.map(p => p.id).join(', '));
-      
-      // STEP 2: Delete patient by ID using localStorage utility
-      console.log('[HomeScreen] Calling deletePatient for ID:', patientToDelete.id);
       await deletePatient(patientToDelete.id);
       
-      // STEP 3: Verify deletion by reading back from storage
-      console.log('[HomeScreen] Verifying deletion...');
       const verifyPatients = await getAllPatients();
-      console.log('[HomeScreen] Patient count after delete:', verifyPatients.length);
-      console.log('[HomeScreen] Remaining patient IDs:', verifyPatients.map(p => p.id).join(', '));
       
       const stillExists = verifyPatients.find(p => p.id === patientToDelete.id);
       if (stillExists) {
-        console.error('[HomeScreen] VERIFICATION FAILED: Patient still exists after delete!');
         throw new Error('Failed to verify patient was deleted');
       }
       
-      console.log('[HomeScreen] Verification SUCCESS: Patient deleted from storage');
-      
-      // STEP 4: Update local state immediately
-      console.log('[HomeScreen] Updating local state to remove deleted patient');
       setPatients(verifyPatients);
-      
-      // STEP 5: Close modal and clear selection
       setDeleteModalVisible(false);
       setPatientToDelete(null);
       
-      console.log('[HomeScreen] ========== CONFIRM DELETE END ==========');
-      
-      // Show success message
       Alert.alert('Success', `${patientToDelete.name} has been deleted.`);
       
     } catch (error: any) {
@@ -248,7 +187,6 @@ export default function HomeScreen() {
   };
 
   const cancelDelete = () => {
-    console.log('[HomeScreen] User cancelled deletion');
     setDeleteModalVisible(false);
     setPatientToDelete(null);
   };
@@ -428,10 +366,7 @@ export default function HomeScreen() {
           
           <TouchableOpacity
             style={styles.sortButton}
-            onPress={() => {
-              console.log('[HomeScreen] User tapped sort button');
-              setShowSortMenu(!showSortMenu);
-            }}
+            onPress={() => setShowSortMenu(!showSortMenu)}
           >
             <IconSymbol
               ios_icon_name="arrow.up.arrow.down"
@@ -455,7 +390,6 @@ export default function HomeScreen() {
                   <TouchableOpacity
                     style={[styles.sortMenuItem, isActive && styles.sortMenuItemActive]}
                     onPress={() => {
-                      console.log('[HomeScreen] User selected sort option:', option);
                       setSortBy(option);
                       setShowSortMenu(false);
                     }}

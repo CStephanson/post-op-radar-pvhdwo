@@ -1,4 +1,3 @@
-import React from "react";
 import * as Haptics from "expo-haptics";
 import { Pressable, StyleSheet, useColorScheme, View, Text } from "react-native";
 import ReanimatedSwipeable from "react-native-gesture-handler/ReanimatedSwipeable";

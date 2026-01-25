@@ -1,5 +1,4 @@
 
-import React from 'react';
 import {
   View,
   Text,
@@ -8,6 +7,7 @@ import {
   Platform,
   Dimensions,
 } from 'react-native';
+import { useMemo, useEffect, Fragment } from 'react';
 import { useRouter, usePathname } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { IconSymbol } from '@/components/IconSymbol';
@@ -50,7 +50,7 @@ export default function FloatingTabBar({
   const animatedValue = useSharedValue(0);
 
   // Improved active tab detection with better path matching
-  const activeTabIndex = React.useMemo(() => {
+  const activeTabIndex = useMemo(() => {
     // Find the best matching tab based on the current pathname
     let bestMatch = -1;
     let bestMatchScore = 0;
@@ -85,7 +85,7 @@ export default function FloatingTabBar({
     return bestMatch >= 0 ? bestMatch : 0;
   }, [pathname, tabs]);
 
-  React.useEffect(() => {
+  useEffect(() => {
     if (activeTabIndex >= 0) {
       animatedValue.value = withSpring(activeTabIndex, {
         damping: 20,
@@ -175,9 +175,9 @@ export default function FloatingTabBar({
               const isActive = activeTabIndex === index;
 
               return (
-                <React.Fragment key={index}>
+                <Fragment key={index}>
                 <TouchableOpacity
-                  key={index} // Use index as key
+                  key={index}
                   style={styles.tab}
                   onPress={() => handleTabPress(tab.route)}
                   activeOpacity={0.7}
@@ -200,7 +200,7 @@ export default function FloatingTabBar({
                     </Text>
                   </View>
                 </TouchableOpacity>
-                </React.Fragment>
+                </Fragment>
               );
             })}
           </View>

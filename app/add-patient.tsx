@@ -20,8 +20,6 @@ import DateTimePicker from '@react-native-community/datetimepicker';
 import { createPatient, getAllPatients } from '@/utils/localStorage';
 
 export default function AddPatientScreen() {
-  console.log('[AddPatient] AddPatientScreen rendered - Add Patient clicked');
-  
   const navigation = useNavigation();
   const [saving, setSaving] = useState(false);
   
@@ -54,18 +52,12 @@ export default function AddPatientScreen() {
   const [nameError, setNameError] = useState('');
 
   const handleCancel = () => {
-    console.log('[AddPatient] User tapped Cancel button');
     navigation.goBack();
   };
 
   const handleAddPatient = async () => {
-    console.log('[AddPatient] ========== ADD PATIENT BUTTON TAPPED ==========');
-    console.log('[AddPatient] User tapped Add Patient button');
-    
-    // Validate name is not empty
     const trimmedName = name.trim();
     if (!trimmedName) {
-      console.log('[AddPatient] Validation failed: Name is empty');
       setNameError('Patient name is required');
       Alert.alert('Validation Error', 'Please enter a patient name');
       return;
@@ -75,13 +67,6 @@ export default function AddPatientScreen() {
     setSaving(true);
     
     try {
-      // Get current patient count BEFORE adding
-      const patientsBefore = await getAllPatients();
-      const countBefore = patientsBefore.length;
-      console.log('[AddPatient] DEBUG: Patient count BEFORE adding:', countBefore);
-      console.log('[AddPatient] DEBUG: Existing patient names:', patientsBefore.map(p => p.name).join(', '));
-      
-      // Combine intra-op and post-op complications into single field
       const combinedComplications = [
         intraOpComplications.trim() && `Intra-op: ${intraOpComplications.trim()}`,
         postOpComplications.trim() && `Post-op: ${postOpComplications.trim()}`
@@ -111,39 +96,18 @@ export default function AddPatientScreen() {
         notes: '',
       };
       
-      console.log('[AddPatient] Creating new patient in local storage:', newPatientData.name);
       const newPatient = await createPatient(newPatientData);
       
-      console.log('[AddPatient] Patient created successfully in local storage:', newPatient.id);
-      
-      // Verify patient was saved by re-reading from storage
       const patientsAfter = await getAllPatients();
-      const countAfter = patientsAfter.length;
-      console.log('[AddPatient] DEBUG: Patient count AFTER adding:', countAfter);
-      console.log('[AddPatient] DEBUG: All patient names now:', patientsAfter.map(p => p.name).join(', '));
-      console.log('[AddPatient] DEBUG: Saving patients: previous=' + countBefore + ', new=' + countAfter);
-      
       const verifiedPatient = patientsAfter.find(p => p.id === newPatient.id);
       
       if (!verifiedPatient) {
         throw new Error('Failed to verify patient was saved to local storage');
       }
       
-      if (countAfter !== countBefore + 1) {
-        console.error('[AddPatient] ERROR: Patient count did not increase correctly!');
-        console.error('[AddPatient] Expected:', countBefore + 1, 'Got:', countAfter);
-      }
-      
-      console.log('[AddPatient] Patient verified in local storage');
-      console.log('[AddPatient] ========== ADD PATIENT SUCCESS ==========');
-      
       Alert.alert('Success', `Patient "${trimmedName}" added successfully!`);
-      
-      // Navigate back to dashboard - it will auto-refresh via useFocusEffect
-      console.log('[AddPatient] Navigating back to Dashboard screen');
       navigation.navigate('Dashboard' as never);
     } catch (error: any) {
-      console.error('[AddPatient] ========== ADD PATIENT ERROR ==========');
       console.error('[AddPatient] Error creating patient:', error);
       const errorMsg = error.message || 'Failed to add patient to local storage. Please try again.';
       Alert.alert('Storage Error', errorMsg, [
@@ -376,10 +340,7 @@ export default function AddPatientScreen() {
               <Text style={styles.label}>Date and Time of Operation</Text>
               <TouchableOpacity
                 style={styles.dateButton}
-                onPress={() => {
-                  console.log('[AddPatient] User tapped date picker');
-                  setShowDatePicker(true);
-                }}
+                onPress={() => setShowDatePicker(true)}
               >
                 <Text style={styles.dateButtonText}>{dateText}</Text>
                 <IconSymbol
@@ -399,7 +360,6 @@ export default function AddPatientScreen() {
                 onChange={(event, selectedDate) => {
                   setShowDatePicker(false);
                   if (selectedDate) {
-                    console.log('[AddPatient] User selected date:', selectedDate);
                     setOperationDateTime(selectedDate);
                   }
                 }}
@@ -489,10 +449,7 @@ export default function AddPatientScreen() {
                     { borderColor: greenBorderColor },
                     alertStatus === 'green' && { backgroundColor: greenBgColor, borderWidth: 3 }
                   ]}
-                  onPress={() => {
-                    console.log('[AddPatient] User selected green status');
-                    setAlertStatus('green');
-                  }}
+                  onPress={() => setAlertStatus('green')}
                 >
                   <IconSymbol
                     ios_icon_name="checkmark.circle.fill"
@@ -511,10 +468,7 @@ export default function AddPatientScreen() {
                     { borderColor: yellowBorderColor },
                     alertStatus === 'yellow' && { backgroundColor: yellowBgColor, borderWidth: 3 }
                   ]}
-                  onPress={() => {
-                    console.log('[AddPatient] User selected yellow status');
-                    setAlertStatus('yellow');
-                  }}
+                  onPress={() => setAlertStatus('yellow')}
                 >
                   <IconSymbol
                     ios_icon_name="exclamationmark.triangle.fill"
@@ -533,10 +487,7 @@ export default function AddPatientScreen() {
                     { borderColor: redBorderColor },
                     alertStatus === 'red' && { backgroundColor: redBgColor, borderWidth: 3 }
                   ]}
-                  onPress={() => {
-                    console.log('[AddPatient] User selected red status');
-                    setAlertStatus('red');
-                  }}
+                  onPress={() => setAlertStatus('red')}
                 >
                   <IconSymbol
                     ios_icon_name="exclamationmark.octagon.fill"

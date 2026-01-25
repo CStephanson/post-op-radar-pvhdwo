@@ -19,7 +19,6 @@ import { useUnsavedChanges } from '@/hooks/useUnsavedChanges';
 import DateTimePicker from '@react-native-community/datetimepicker';
 
 export default function PatientInfoScreen() {
-  console.log('PatientInfoScreen rendered');
   const navigation = useNavigation();
   const route = useRoute();
   const { id } = route.params as { id: string };
@@ -88,13 +87,10 @@ export default function PatientInfoScreen() {
     manualStatus !== originalValues.manualStatus;
 
   const handleSave = useCallback(async (shouldNavigate: boolean = true) => {
-    console.log('[PatientInfo] Saving patient info, shouldNavigate:', shouldNavigate);
-    
     setSaving(true);
     try {
       const { updatePatient, getPatientById } = await import('@/utils/localStorage');
       
-      // ALWAYS include ALL fields in the save payload (no partial saves)
       const patientData = {
         name: name.trim() || 'Unnamed Patient',
         idStatement: idStatement.trim() || '',
@@ -114,20 +110,14 @@ export default function PatientInfoScreen() {
         manualStatus,
       };
       
-      console.log('[PatientInfo] Saving ALL patient fields to local storage');
-      
-      // Single atomic update - either all fields save or it fails
       await updatePatient(id as string, patientData);
       
-      // Re-fetch the saved record to ensure UI matches persisted data
-      console.log('[PatientInfo] Re-fetching saved patient to verify persistence');
       const savedPatient = await getPatientById(id as string);
       
       if (!savedPatient) {
         throw new Error('Failed to verify patient was saved');
       }
       
-      // Update local state with canonical version from storage
       const savedValues = {
         name: savedPatient.name || '',
         idStatement: savedPatient.idStatement || '',
@@ -165,10 +155,8 @@ export default function PatientInfoScreen() {
       setManualStatus(savedValues.manualStatus);
       setOriginalValues(savedValues);
       
-      console.log('[PatientInfo] Patient information saved and verified in local storage');
       Alert.alert('Success', 'Patient information saved successfully!');
       
-      // Navigate back after save completes (if requested)
       if (shouldNavigate) {
         navigation.goBack();
       }
@@ -178,28 +166,24 @@ export default function PatientInfoScreen() {
         { text: 'Retry', onPress: () => handleSave(shouldNavigate) },
         { text: 'Cancel', style: 'cancel' }
       ]);
-      throw error; // Re-throw so useUnsavedChanges knows save failed
+      throw error;
     } finally {
       setSaving(false);
     }
   }, [id, name, idStatement, procedureType, preOpDiagnosis, postOpDiagnosis, specimensTaken, estimatedBloodLoss, complications, operationDateTime, surgeon, anesthesiologist, anesthesiaType, clinicalStatus, hospitalLocation, statusMode, manualStatus, navigation]);
 
   const loadPatientInfo = useCallback(async () => {
-    console.log('[PatientInfo] Loading patient info for ID:', id);
     setLoading(true);
     try {
       const { getPatientById } = await import('@/utils/localStorage');
       const patient = await getPatientById(id as string);
       
       if (!patient) {
-        console.error('[PatientInfo] Patient not found in local storage');
         Alert.alert('Error', 'Patient not found', [
           { text: 'OK', onPress: () => navigation.goBack() }
         ]);
         return;
       }
-      
-      console.log('[PatientInfo] Patient loaded from local storage:', patient.name);
       
       const values = {
         name: patient.name || '',
@@ -280,7 +264,6 @@ export default function PatientInfoScreen() {
   }, [loadPatientInfo]);
 
   const handleDelete = () => {
-    console.log('[PatientInfo] User tapped delete button');
     Alert.alert(
       'Delete Patient',
       'Are you sure you want to permanently delete this patient and all associated data? This action cannot be undone.',
@@ -293,20 +276,16 @@ export default function PatientInfoScreen() {
           text: 'Delete',
           style: 'destructive',
           onPress: async () => {
-            console.log('[PatientInfo] User confirmed deletion');
             try {
               const { deletePatient, getPatientById } = await import('@/utils/localStorage');
               
-              // Delete from local storage
               await deletePatient(id as string);
               
-              // Verify deletion
               const deletedPatient = await getPatientById(id as string);
               if (deletedPatient) {
                 throw new Error('Failed to verify patient was deleted');
               }
               
-              console.log('[PatientInfo] Patient deleted from local storage');
               Alert.alert('Success', 'Patient deleted successfully');
               navigation.navigate('Home' as never);
             } catch (error: any) {
@@ -583,10 +562,7 @@ export default function PatientInfoScreen() {
             <View style={styles.statusModeToggle}>
               <TouchableOpacity
                 style={[styles.statusModeButton, statusMode === 'auto' && styles.statusModeButtonActive]}
-                onPress={() => {
-                  console.log('User selected auto status mode');
-                  setStatusMode('auto');
-                }}
+                onPress={() => setStatusMode('auto')}
               >
                 <IconSymbol
                   ios_icon_name="wand.and.stars"
@@ -601,10 +577,7 @@ export default function PatientInfoScreen() {
 
               <TouchableOpacity
                 style={[styles.statusModeButton, statusMode === 'manual' && styles.statusModeButtonActive]}
-                onPress={() => {
-                  console.log('User selected manual status mode');
-                  setStatusMode('manual');
-                }}
+                onPress={() => setStatusMode('manual')}
               >
                 <IconSymbol
                   ios_icon_name="hand.raised.fill"
@@ -640,10 +613,7 @@ export default function PatientInfoScreen() {
                     { borderColor: colors.alertGreenBorder },
                     manualStatus === 'green' && { backgroundColor: colors.alertGreenBg, borderWidth: 3 }
                   ]}
-                  onPress={() => {
-                    console.log('User selected green status');
-                    setManualStatus('green');
-                  }}
+                  onPress={() => setManualStatus('green')}
                 >
                   <IconSymbol
                     ios_icon_name="checkmark.circle.fill"
@@ -663,10 +633,7 @@ export default function PatientInfoScreen() {
                     { borderColor: colors.alertYellowBorder },
                     manualStatus === 'orange' && { backgroundColor: colors.alertYellowBg, borderWidth: 3 }
                   ]}
-                  onPress={() => {
-                    console.log('User selected orange status');
-                    setManualStatus('orange');
-                  }}
+                  onPress={() => setManualStatus('orange')}
                 >
                   <IconSymbol
                     ios_icon_name="exclamationmark.triangle.fill"
@@ -686,10 +653,7 @@ export default function PatientInfoScreen() {
                     { borderColor: colors.alertRedBorder },
                     manualStatus === 'red' && { backgroundColor: colors.alertRedBg, borderWidth: 3 }
                   ]}
-                  onPress={() => {
-                    console.log('User selected red status');
-                    setManualStatus('red');
-                  }}
+                  onPress={() => setManualStatus('red')}
                 >
                   <IconSymbol
                     ios_icon_name="exclamationmark.octagon.fill"

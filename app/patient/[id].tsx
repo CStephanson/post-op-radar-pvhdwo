@@ -24,9 +24,7 @@ import { CANADIAN_LAB_RANGES, CANADIAN_VITAL_RANGES, checkVitalAbnormalities, ch
 import { calculateAutoStatus } from '@/utils/autoStatus';
 
 export default function PatientDetailScreen({ route, navigation }: any) {
-  console.log('[PatientDetail] Component rendered');
   const { id } = route.params;
-  console.log('[PatientDetail] Patient ID from route params:', id);
   
   const [patient, setPatient] = useState<Patient | null>(null);
   const [alerts, setAlerts] = useState<PatientAlert[]>([]);
@@ -62,34 +60,18 @@ export default function PatientDetailScreen({ route, navigation }: any) {
   const [editLabNotes, setEditLabNotes] = useState('');
 
   const loadPatientData = useCallback(async () => {
-    console.log('[PatientDetail] ========== LOAD PATIENT DATA START ==========');
-    console.log('[PatientDetail] Loading patient data for ID:', id);
     try {
       const patientData = await getPatientById(id as string);
       
       if (!patientData) {
-        console.error('[PatientDetail] Patient not found in local storage');
         Alert.alert('Error', 'Patient not found', [
           { text: 'OK', onPress: () => navigation.goBack() }
         ]);
         return;
       }
       
-      console.log('[PatientDetail] Patient loaded from local storage:', patientData.name);
-      console.log('[PatientDetail] Patient ID:', patientData.id);
-      console.log('[PatientDetail] Patient has', patientData.vitalEntries?.length || 0, 'vital entries');
-      console.log('[PatientDetail] Patient has', patientData.labEntries?.length || 0, 'lab entries');
-      
-      if (patientData.vitalEntries && patientData.vitalEntries.length > 0) {
-        console.log('[PatientDetail] First vital entry:', JSON.stringify(patientData.vitalEntries[0]));
-      }
-      if (patientData.labEntries && patientData.labEntries.length > 0) {
-        console.log('[PatientDetail] First lab entry:', JSON.stringify(patientData.labEntries[0]));
-      }
-      
       setPatient(patientData);
       updatePatientAnalysis(patientData);
-      console.log('[PatientDetail] ========== LOAD PATIENT DATA END ==========');
     } catch (error: any) {
       console.error('[PatientDetail] Error loading patient data:', error);
       Alert.alert('Storage Error', 'Failed to load patient data from local storage', [
@@ -109,22 +91,17 @@ export default function PatientDetailScreen({ route, navigation }: any) {
     const patientAlerts = generateAlerts(updatedPatient);
     setAlerts(patientAlerts);
     
-    // Calculate auto-status based on Canadian reference ranges
     const autoStatusResult = calculateAutoStatus(updatedPatient);
     updatedPatient.computedStatus = autoStatusResult.status;
     
     if (updatedPatient.statusMode === 'manual' && updatedPatient.manualStatus) {
-      console.log('[PatientDetail] Manual status override active - using manual status:', updatedPatient.manualStatus);
       updatedPatient.alertStatus = updatedPatient.manualStatus;
     } else {
-      console.log('[PatientDetail] Auto status mode - using computed status:', autoStatusResult.status);
-      console.log('[PatientDetail] Auto-status summary:', autoStatusResult.summary);
       updatedPatient.alertStatus = autoStatusResult.status;
     }
   };
 
   const openEditModal = (type: 'vitals' | 'labs') => {
-    console.log('[PatientDetail] User tapped Add button for:', type);
     setEditType(type);
     
     if (type === 'vitals') {
@@ -156,26 +133,17 @@ export default function PatientDetailScreen({ route, navigation }: any) {
   };
 
   const saveEdits = async () => {
-    console.log('[PatientDetail] ========== SAVE ENTRY START ==========');
-    console.log('[PatientDetail] User tapped Save button for:', editType);
     if (!patient) {
-      console.error('[PatientDetail] Cannot save - patient is null');
       return;
     }
-    
-    console.log('[PatientDetail] Current patient ID:', patient.id);
-    console.log('[PatientDetail] Current patient name:', patient.name);
     
     try {
       if (editType === 'vitals') {
         const hasValue = editHr || editBpSys || editBpDia || editRr || editTemp || editSpo2 || editUrineOutput || editPain;
         if (!hasValue) {
-          console.log('[PatientDetail] Validation failed - no vital values entered');
           Alert.alert('Validation Error', 'Please enter at least one vital sign value');
           return;
         }
-        
-        console.log('[PatientDetail] Validation passed - creating vital entry');
         
         const newVitalEntry: Omit<VitalEntry, 'id'> = {
           timestamp: new Date(),
@@ -190,29 +158,18 @@ export default function PatientDetailScreen({ route, navigation }: any) {
           notes: editVitalNotes.trim() || undefined,
         };
         
-        console.log('[PatientDetail] New vital entry to save:', JSON.stringify(newVitalEntry));
-        console.log('[PatientDetail] Calling addVitalEntry for patient:', patient.id);
-        
         const updatedPatient = await addVitalEntry(patient.id, newVitalEntry);
-        
-        console.log('[PatientDetail] addVitalEntry returned successfully');
-        console.log('[PatientDetail] Updated patient has', updatedPatient.vitalEntries?.length || 0, 'vital entries');
         
         setPatient(updatedPatient);
         updatePatientAnalysis(updatedPatient);
         
-        const successMessage = `Vital signs saved! Total entries: ${updatedPatient.vitalEntries?.length || 0}`;
-        console.log('[PatientDetail]', successMessage);
-        Alert.alert('Success', successMessage);
+        Alert.alert('Success', 'Vital signs saved successfully');
       } else {
         const hasValue = editWbc || editHb || editPlt || editNa || editK || editCr || editLactate || editBili || editAlt || editAst || editInr;
         if (!hasValue) {
-          console.log('[PatientDetail] Validation failed - no lab values entered');
           Alert.alert('Validation Error', 'Please enter at least one lab value');
           return;
         }
-        
-        console.log('[PatientDetail] Validation passed - creating lab entry');
         
         const newLabEntry: Omit<LabEntry, 'id'> = {
           timestamp: new Date(),
@@ -230,29 +187,17 @@ export default function PatientDetailScreen({ route, navigation }: any) {
           notes: editLabNotes.trim() || undefined,
         };
         
-        console.log('[PatientDetail] New lab entry to save:', JSON.stringify(newLabEntry));
-        console.log('[PatientDetail] Calling addLabEntry for patient:', patient.id);
-        
         const updatedPatient = await addLabEntry(patient.id, newLabEntry);
-        
-        console.log('[PatientDetail] addLabEntry returned successfully');
-        console.log('[PatientDetail] Updated patient has', updatedPatient.labEntries?.length || 0, 'lab entries');
         
         setPatient(updatedPatient);
         updatePatientAnalysis(updatedPatient);
         
-        const successMessage = `Lab values saved! Total entries: ${updatedPatient.labEntries?.length || 0}`;
-        console.log('[PatientDetail]', successMessage);
-        Alert.alert('Success', successMessage);
+        Alert.alert('Success', 'Lab values saved successfully');
       }
       
       setEditModalVisible(false);
-      console.log('[PatientDetail] ========== SAVE ENTRY END ==========');
     } catch (error: any) {
-      console.error('[PatientDetail] ========== SAVE ENTRY ERROR ==========');
       console.error('[PatientDetail] Error saving entry:', error);
-      console.error('[PatientDetail] Error message:', error.message);
-      console.error('[PatientDetail] Error stack:', error.stack);
       Alert.alert('Storage Error', 'Failed to save data to local storage. Please try again.', [
         { text: 'Retry', onPress: saveEdits },
         { text: 'Cancel', style: 'cancel' }
@@ -261,14 +206,12 @@ export default function PatientDetailScreen({ route, navigation }: any) {
   };
 
   const confirmDeleteVital = (vitalId: string, timestamp: Date) => {
-    console.log('[PatientDetail] User tapped delete for vital entry:', vitalId);
     const timestampText = formatTimestamp(timestamp);
     setDeleteTarget({ type: 'vitals', id: vitalId, timestamp: timestampText });
     setDeleteModalVisible(true);
   };
 
   const confirmDeleteLab = (labId: string, timestamp: Date) => {
-    console.log('[PatientDetail] User tapped delete for lab entry:', labId);
     const timestampText = formatTimestamp(timestamp);
     setDeleteTarget({ type: 'labs', id: labId, timestamp: timestampText });
     setDeleteModalVisible(true);
@@ -279,22 +222,13 @@ export default function PatientDetailScreen({ route, navigation }: any) {
       return;
     }
     
-    console.log('[PatientDetail] ========== DELETE ENTRY START ==========');
-    console.log('[PatientDetail] Deleting', deleteTarget.type, 'entry:', deleteTarget.id);
-    
     try {
       let updatedPatient: Patient;
       
       if (deleteTarget.type === 'vitals') {
-        console.log('[PatientDetail] Calling deleteVitalEntry for patient:', patient.id, 'entry:', deleteTarget.id);
         updatedPatient = await deleteVitalEntry(patient.id, deleteTarget.id);
-        console.log('[PatientDetail] Vital entry deleted successfully');
-        console.log('[PatientDetail] Patient now has', updatedPatient.vitalEntries?.length || 0, 'vital entries');
       } else {
-        console.log('[PatientDetail] Calling deleteLabEntry for patient:', patient.id, 'entry:', deleteTarget.id);
         updatedPatient = await deleteLabEntry(patient.id, deleteTarget.id);
-        console.log('[PatientDetail] Lab entry deleted successfully');
-        console.log('[PatientDetail] Patient now has', updatedPatient.labEntries?.length || 0, 'lab entries');
       }
       
       setPatient(updatedPatient);
@@ -305,12 +239,8 @@ export default function PatientDetailScreen({ route, navigation }: any) {
       
       const entryType = deleteTarget.type === 'vitals' ? 'Vital entry' : 'Lab entry';
       Alert.alert('Deleted', `${entryType} deleted successfully`);
-      
-      console.log('[PatientDetail] ========== DELETE ENTRY END ==========');
     } catch (error: any) {
-      console.error('[PatientDetail] ========== DELETE ENTRY ERROR ==========');
       console.error('[PatientDetail] Error deleting entry:', error);
-      console.error('[PatientDetail] Error message:', error.message);
       
       setDeleteModalVisible(false);
       setDeleteTarget(null);
@@ -320,7 +250,6 @@ export default function PatientDetailScreen({ route, navigation }: any) {
   };
 
   const cancelDelete = () => {
-    console.log('[PatientDetail] User cancelled delete');
     setDeleteModalVisible(false);
     setDeleteTarget(null);
   };
@@ -408,8 +337,6 @@ export default function PatientDetailScreen({ route, navigation }: any) {
 
   const vitalCountText = `${sortedVitals.length}`;
   const labCountText = `${sortedLabs.length}`;
-
-  console.log('[PatientDetail] Rendering with', sortedVitals.length, 'vitals and', sortedLabs.length, 'labs');
 
   const renderVitalEntry = ({ item }: { item: VitalEntry }) => {
     const timestampText = formatTimestamp(new Date(item.timestamp));

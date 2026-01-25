@@ -1,6 +1,6 @@
 
 import "react-native-reanimated";
-import React, { useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { useFonts } from "expo-font";
 import * as SplashScreen from "expo-splash-screen";
 import { SystemBars } from "react-native-edge-to-edge";
@@ -18,20 +18,16 @@ import { WidgetProvider } from "@/contexts/WidgetContext";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { migrateExistingData } from "@/utils/localStorage";
 
-// Import screens
 import HomeScreen from "./home";
 import AddPatientScreen from "./add-patient";
 import PatientDetailScreen from "./patient/[id]";
 import PatientInfoScreen from "./patient-info/[id]";
 
-// Prevent the splash screen from auto-hiding before asset loading is complete.
 SplashScreen.preventAutoHideAsync();
 
-// Global error handler to catch unhandled errors
 if (typeof ErrorUtils !== 'undefined') {
   const originalHandler = ErrorUtils.getGlobalHandler();
   ErrorUtils.setGlobalHandler((error, isFatal) => {
-    console.error('[App] Global error caught:', error, 'isFatal:', isFatal);
     if (originalHandler) {
       originalHandler(error, isFatal);
     }
@@ -41,7 +37,6 @@ if (typeof ErrorUtils !== 'undefined') {
 const Stack = createNativeStackNavigator();
 
 export default function RootLayout() {
-  console.log('[App] ===== RootLayout rendering =====');
   const colorScheme = useColorScheme();
   const [loaded] = useFonts({
     SpaceMono: require("../assets/fonts/SpaceMono-Regular.ttf"),
@@ -49,47 +44,33 @@ export default function RootLayout() {
   const [migrationComplete, setMigrationComplete] = useState(false);
 
   useEffect(() => {
-    console.log('[App] Root layout mounted - app is starting');
-    
-    // Initialize error logging after app has started
     try {
       const errorLogger = require('@/utils/errorLogger');
       if (errorLogger && errorLogger.setupErrorLogging) {
         errorLogger.setupErrorLogging();
-        console.log('[App] Error logging initialized');
       } else if (errorLogger && errorLogger.default && errorLogger.default.setupErrorLogging) {
         errorLogger.default.setupErrorLogging();
-        console.log('[App] Error logging initialized (default export)');
-      } else {
-        console.warn('[App] Error logging module loaded but setupErrorLogging not found');
       }
     } catch (error) {
-      console.error('[App] Failed to initialize error logging:', error);
+      // Error logging setup failed, continue without it
     }
 
-    // Run one-time data migration
     migrateExistingData()
       .then(() => {
-        console.log('[App] Data migration complete');
         setMigrationComplete(true);
       })
-      .catch((error) => {
-        console.error('[App] Data migration failed:', error);
-        // Don't block app startup on migration failure
+      .catch(() => {
         setMigrationComplete(true);
       });
   }, []);
 
   useEffect(() => {
     if (loaded && migrationComplete) {
-      console.log('[App] Fonts loaded and migration complete, hiding splash screen');
       SplashScreen.hideAsync();
     }
   }, [loaded, migrationComplete]);
 
   if (!loaded || !migrationComplete) {
-    console.log('[App] Fonts not loaded or migration in progress, showing loading screen');
-    // Show a visible loading screen instead of null to prevent blank screen
     return (
       <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#fff' }}>
         <ActivityIndicator size="large" color="#007AFF" />
@@ -102,8 +83,6 @@ export default function RootLayout() {
       </View>
     );
   }
-
-  console.log('[App] Fonts loaded and migration complete, rendering app layout');
 
   const CustomDefaultTheme: Theme = {
     ...DefaultTheme,
