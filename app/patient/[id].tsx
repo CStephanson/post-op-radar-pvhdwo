@@ -46,7 +46,18 @@ export default function PatientDetailScreen({ route, navigation }: any) {
   // CRITICAL: Track AsyncStorage loading state separately
   const [isLoadingPatients, setIsLoadingPatients] = useState(true);
   const [showDebug, setShowDebug] = useState(false);
-  const [debugInfo, setDebugInfo] = useState<any>(null);
+  // CRITICAL: Initialize debugInfo with default values (not null)
+  const [debugInfo, setDebugInfo] = useState<any>({
+    routePatientId: String(patientId || 'undefined'),
+    routePatientIdType: typeof patientId,
+    hasRoutePatient: !!routePatient,
+    storageKey: 'opmgmt_patients_v1',
+    loadedPatientsCount: 0,
+    firstThreePatientIds: 'loading...',
+    allPatientIds: [],
+    matchFound: false,
+    storageError: null,
+  });
   
   // Edit form state for vitals
   const [editHr, setEditHr] = useState('');
@@ -76,6 +87,9 @@ export default function PatientDetailScreen({ route, navigation }: any) {
   // CRITICAL: Background reconciliation with storage
   // MUST complete before evaluating patient existence
   const reconcileWithStorage = useCallback(async () => {
+    let storageErrorMessage: string | null = null;
+    let allPatients: Patient[] = [];
+    
     try {
       console.log('[PatientDetail] ========== RECONCILIATION START ==========');
       console.log('[PatientDetail] Reconciling patientId:', patientId);
@@ -83,28 +97,45 @@ export default function PatientDetailScreen({ route, navigation }: any) {
       
       setIsLoadingPatients(true);
       
-      const allPatients = await getAllPatients();
-      console.log('[PatientDetail] Loaded', allPatients.length, 'patients from storage');
-      console.log('[PatientDetail] AsyncStorage read complete');
+      // CRITICAL: getAllPatients ALWAYS returns a valid array, never throws
+      try {
+        allPatients = await getAllPatients();
+        console.log('[PatientDetail] Loaded', allPatients.length, 'patients from storage');
+        console.log('[PatientDetail] AsyncStorage read complete');
+      } catch (error: unknown) {
+        // This should NEVER happen because getAllPatients catches all errors
+        // But if it does, capture the error message
+        storageErrorMessage = error instanceof Error ? error.message : String(error);
+        console.error('[PatientDetail] UNEXPECTED ERROR from getAllPatients:', storageErrorMessage);
+        allPatients = [];
+      }
       
-      // Build debug info
-      const debugData = {
-        routePatientId: patientId,
+      // CRITICAL: Build debug info with REAL values (not "unknown")
+      const firstThreeIds = allPatients.slice(0, 3).map(p => p.patientId);
+      const firstThreeIdsStr = firstThreeIds.length > 0 ? firstThreeIds.join(', ') : 'none';
+      
+      // Try to find patient in storage
+      const storedPatient = allPatients.find(p => String(p.patientId) === String(patientId));
+      const matchFound = !!storedPatient;
+      
+      // CRITICAL: Update debugInfo with REAL values immediately
+      const newDebugInfo = {
+        routePatientId: String(patientId || 'undefined'),
         routePatientIdType: typeof patientId,
         hasRoutePatient: !!routePatient,
         storageKey: 'opmgmt_patients_v1',
         loadedPatientsCount: allPatients.length,
-        firstThreePatientIds: allPatients.slice(0, 3).map(p => p.patientId).join(', '),
+        firstThreePatientIds: firstThreeIdsStr,
         allPatientIds: allPatients.map(p => p.patientId),
-        matchFound: false,
+        matchFound: matchFound,
+        storageError: storageErrorMessage,
       };
       
-      // Try to find patient in storage
-      const storedPatient = allPatients.find(p => String(p.patientId) === String(patientId));
+      console.log('[PatientDetail] Debug info populated:', newDebugInfo);
+      setDebugInfo(newDebugInfo);
       
       if (storedPatient) {
         console.log('[PatientDetail] FOUND patient in storage:', storedPatient.name);
-        debugData.matchFound = true;
         setPatient(storedPatient);
         updatePatientAnalysis(storedPatient);
         setLoadError(false);
@@ -129,17 +160,42 @@ export default function PatientDetailScreen({ route, navigation }: any) {
           setPatient(patientToUpsert);
           updatePatientAnalysis(patientToUpsert);
           setLoadError(false);
+          
+          // Update debug info to reflect the upsert
+          newDebugInfo.loadedPatientsCount = updatedPatients.length;
+          newDebugInfo.matchFound = true;
+          setDebugInfo(newDebugInfo);
         } else {
           console.log('[PatientDetail] No route patient to upsert - showing error');
           setLoadError(true);
         }
       }
       
-      setDebugInfo(debugData);
       console.log('[PatientDetail] isLoadingPatients: false (AsyncStorage read finished)');
       console.log('[PatientDetail] ========== RECONCILIATION END ==========');
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('[PatientDetail] Error during reconciliation:', error);
+      
+      // CRITICAL: Still populate debugInfo even on error
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      const firstThreeIds = allPatients.slice(0, 3).map(p => p.patientId);
+      const firstThreeIdsStr = firstThreeIds.length > 0 ? firstThreeIds.join(', ') : 'none';
+      
+      const errorDebugInfo = {
+        routePatientId: String(patientId || 'undefined'),
+        routePatientIdType: typeof patientId,
+        hasRoutePatient: !!routePatient,
+        storageKey: 'opmgmt_patients_v1',
+        loadedPatientsCount: allPatients.length,
+        firstThreePatientIds: firstThreeIdsStr,
+        allPatientIds: allPatients.map(p => p.patientId),
+        matchFound: false,
+        storageError: errorMessage,
+      };
+      
+      console.log('[PatientDetail] Error debug info populated:', errorDebugInfo);
+      setDebugInfo(errorDebugInfo);
+      
       setLoadError(true);
     } finally {
       setIsLoadingPatients(false);
@@ -282,7 +338,7 @@ export default function PatientDetailScreen({ route, navigation }: any) {
       }
       
       setEditModalVisible(false);
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('[PatientDetail] Error saving entry:', error);
       Alert.alert(
         'Storage Error', 
@@ -329,7 +385,7 @@ export default function PatientDetailScreen({ route, navigation }: any) {
       
       const entryType = deleteTarget.type === 'vitals' ? 'Vital entry' : 'Lab entry';
       Alert.alert('Deleted', `${entryType} deleted successfully`);
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('[PatientDetail] Error deleting entry:', error);
       
       setDeleteModalVisible(false);
@@ -362,12 +418,15 @@ export default function PatientDetailScreen({ route, navigation }: any) {
   // AND patient is still not found
   if (loadError || !patient) {
     console.log('[PatientDetail] Rendering error state (storage loaded, patient not found)');
-    const routePatientIdStr = String(patientId || 'undefined');
-    const hasRoutePatientStr = routePatient ? 'yes' : 'no';
-    const storageKeyStr = 'opmgmt_patients_v1';
-    const loadedCountStr = debugInfo ? String(debugInfo.loadedPatientsCount) : 'unknown';
-    const firstThreeIdsStr = debugInfo ? debugInfo.firstThreePatientIds : 'unknown';
-    const matchFoundStr = debugInfo ? (debugInfo.matchFound ? 'yes' : 'no') : 'unknown';
+    
+    // CRITICAL: Use REAL values from debugInfo (never "unknown")
+    const routePatientIdStr = String(debugInfo.routePatientId);
+    const hasRoutePatientStr = debugInfo.hasRoutePatient ? 'yes' : 'no';
+    const storageKeyStr = debugInfo.storageKey;
+    const loadedCountStr = String(debugInfo.loadedPatientsCount);
+    const firstThreeIdsStr = debugInfo.firstThreePatientIds;
+    const matchFoundStr = debugInfo.matchFound ? 'yes' : 'no';
+    const storageErrorStr = debugInfo.storageError;
 
     return (
       <SafeAreaView style={styles.safeArea}>
@@ -385,6 +444,14 @@ export default function PatientDetailScreen({ route, navigation }: any) {
 
           <View style={styles.debugPanel}>
             <Text style={styles.debugTitle}>Debug Information</Text>
+            
+            {storageErrorStr && (
+              <View style={styles.debugRow}>
+                <Text style={styles.debugLabel}>Storage error:</Text>
+                <Text style={[styles.debugValue, styles.debugError]}>{storageErrorStr}</Text>
+              </View>
+            )}
+            
             <View style={styles.debugRow}>
               <Text style={styles.debugLabel}>Route patientId:</Text>
               <Text style={styles.debugValue}>{routePatientIdStr}</Text>
@@ -1572,6 +1639,10 @@ const styles = StyleSheet.create({
     color: colors.text,
     flex: 1,
     textAlign: 'right',
+  },
+  debugError: {
+    color: colors.error,
+    fontWeight: typography.semibold,
   },
   errorButton: {
     backgroundColor: colors.primary,

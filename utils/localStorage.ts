@@ -81,24 +81,27 @@ function ensurePatientIntegrity(patient: any): Patient {
 
 /**
  * PRODUCTION-HARDENED: Get all patients from local storage
+ * CRITICAL: ALWAYS returns a valid array, NEVER throws, NEVER returns undefined
  */
 export async function getAllPatients(): Promise<Patient[]> {
   try {
     console.log('[LocalStorage] ========== GET ALL PATIENTS START ==========');
     console.log('[LocalStorage] Reading from AsyncStorage key:', PATIENTS_KEY);
     
-    const patientsJson = await AsyncStorage.getItem(PATIENTS_KEY);
+    const raw = await AsyncStorage.getItem(PATIENTS_KEY);
     
-    if (!patientsJson || patientsJson === '' || patientsJson === 'null' || patientsJson === 'undefined') {
-      console.log('[LocalStorage] No patients found in storage, returning empty array');
+    // CRITICAL: Handle null/empty/undefined cases
+    if (!raw || raw === '' || raw === 'null' || raw === 'undefined') {
+      console.log('[LocalStorage] No patients found in storage (empty/null), returning empty array');
       return [];
     }
     
-    console.log('[LocalStorage] Raw data length:', patientsJson.length, 'characters');
+    console.log('[LocalStorage] Raw data length:', raw.length, 'characters');
     
-    let patients: any[];
+    // CRITICAL: Try to parse JSON, reset storage if corrupted
+    let parsed: any;
     try {
-      patients = JSON.parse(patientsJson);
+      parsed = JSON.parse(raw);
       console.log('[LocalStorage] JSON parse successful');
     } catch (parseError) {
       console.error('[LocalStorage] JSON parse FAILED - data corrupted. Resetting to empty array.', parseError);
@@ -106,30 +109,32 @@ export async function getAllPatients(): Promise<Patient[]> {
         await AsyncStorage.setItem(PATIENTS_KEY, JSON.stringify([]));
         console.log('[LocalStorage] Corrupted data reset to empty array');
       } catch (resetError) {
-        console.error('[LocalStorage] Failed to reset corrupted data:', resetError);
+        console.error('[LocalStorage] Failed to reset corrupted data (non-fatal):', resetError);
       }
       return [];
     }
     
-    if (!Array.isArray(patients)) {
-      console.error('[LocalStorage] Parsed data is not an array. Resetting to empty array.');
+    // CRITICAL: Ensure parsed data is an array
+    if (!Array.isArray(parsed)) {
+      console.error('[LocalStorage] Parsed data is not an array (type:', typeof parsed, '). Resetting to empty array.');
       try {
         await AsyncStorage.setItem(PATIENTS_KEY, JSON.stringify([]));
         console.log('[LocalStorage] Non-array data reset to empty array');
       } catch (resetError) {
-        console.error('[LocalStorage] Failed to reset non-array data:', resetError);
+        console.error('[LocalStorage] Failed to reset non-array data (non-fatal):', resetError);
       }
       return [];
     }
     
-    console.log('[LocalStorage] Found', patients.length, 'patients in storage');
+    console.log('[LocalStorage] Found', parsed.length, 'patients in storage');
     
+    // Process each patient and ensure integrity
     const validPatients: Patient[] = [];
     let skippedCount = 0;
     
-    for (let i = 0; i < patients.length; i++) {
+    for (let i = 0; i < parsed.length; i++) {
       try {
-        const patient = patients[i];
+        const patient = parsed[i];
         const validPatient = ensurePatientIntegrity(patient);
         
         const patientWithDates: Patient = {
@@ -175,6 +180,7 @@ export async function getAllPatients(): Promise<Patient[]> {
     console.log('[LocalStorage] ========== GET ALL PATIENTS END ==========');
     return validPatients;
   } catch (error) {
+    // CRITICAL: Catch ANY error and return empty array (never throw)
     console.error('[LocalStorage] CRITICAL ERROR in getAllPatients - returning empty array:', error);
     return [];
   }
