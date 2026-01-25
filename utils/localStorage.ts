@@ -5,26 +5,13 @@ import { migrateLabEntryToCanadian } from './canadianUnits';
 import { calculateAutoStatus } from './autoStatus';
 
 // CRITICAL: Single source of truth for patient storage
-// All screens MUST use this exact key
 const PATIENTS_KEY = 'opmgmt_patients_v1';
 const MIGRATION_FLAG_KEY = '@opmgmt_migrated';
 const CANADIAN_UNITS_MIGRATION_FLAG = '@opmgmt_canadian_units_migrated';
-
-/**
- * PRODUCTION-HARDENED Local storage service for patient data
- * All patient data is stored locally on the device using AsyncStorage
- * No backend API calls - fully offline, single-user experience
- * 
- * CRITICAL GUARANTEES:
- * - getAllPatients() NEVER throws - always returns valid array
- * - Corrupted data is automatically reset to empty array
- * - Missing fields are automatically added with defaults
- * - All writes are verified by reading back
- */
+const PATIENTID_MIGRATION_FLAG = '@opmgmt_patientid_migrated';
 
 /**
  * Generate a unique ID for a new patient, vital, or lab entry
- * Uses timestamp + random string to ensure uniqueness
  */
 function generateId(): string {
   return `entry_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
@@ -32,14 +19,27 @@ function generateId(): string {
 
 /**
  * HARDENED: Ensure patient has all required fields
- * This prevents crashes from missing data
- * NEVER throws - always returns valid patient object
+ * CRITICAL: Ensures patientId exists and is stable (never regenerated)
  */
 function ensurePatientIntegrity(patient: any): Patient {
   try {
+    // CRITICAL: Use existing patientId if present, otherwise migrate from id, otherwise generate new
+    let patientId: string;
+    if (patient.patientId) {
+      patientId = patient.patientId;
+    } else if (patient.id) {
+      // Migrate from old id field
+      patientId = patient.id;
+      console.log('[LocalStorage] Migrating patient.id to patient.patientId:', patientId);
+    } else {
+      // Generate new patientId
+      patientId = generateId();
+      console.log('[LocalStorage] Generated new patientId:', patientId);
+    }
+    
     return {
       ...patient,
-      id: patient.id || generateId(),
+      patientId,
       userId: patient.userId || 'local-user',
       name: patient.name || 'Unnamed Patient',
       procedureType: patient.procedureType || 'Unknown Procedure',
@@ -49,7 +49,6 @@ function ensurePatientIntegrity(patient: any): Patient {
       computedStatus: patient.computedStatus || 'green',
       abnormalCount: typeof patient.abnormalCount === 'number' ? patient.abnormalCount : 0,
       mostRecentAbnormalTimestamp: patient.mostRecentAbnormalTimestamp || undefined,
-      // CRITICAL: Ensure vitals and labs arrays exist (never undefined)
       vitals: Array.isArray(patient.vitals) ? patient.vitals : [],
       labs: Array.isArray(patient.labs) ? patient.labs : [],
       vitalEntries: Array.isArray(patient.vitalEntries) ? patient.vitalEntries : [],
@@ -60,9 +59,8 @@ function ensurePatientIntegrity(patient: any): Patient {
     };
   } catch (error) {
     console.error('[LocalStorage] Error ensuring patient integrity, returning minimal patient:', error);
-    // FALLBACK: Return minimal valid patient if anything fails
     return {
-      id: generateId(),
+      patientId: generateId(),
       userId: 'local-user',
       name: 'Unnamed Patient',
       procedureType: 'Unknown Procedure',
@@ -83,15 +81,6 @@ function ensurePatientIntegrity(patient: any): Patient {
 
 /**
  * PRODUCTION-HARDENED: Get all patients from local storage
- * NEVER throws errors - always returns valid array
- * Automatically fixes corrupted data
- * 
- * GUARANTEES:
- * - Returns empty array [] if no data exists
- * - Returns empty array [] if data is corrupted
- * - Returns empty array [] if JSON parse fails
- * - Ensures all patients have required fields
- * - Converts date strings back to Date objects
  */
 export async function getAllPatients(): Promise<Patient[]> {
   try {
@@ -100,22 +89,19 @@ export async function getAllPatients(): Promise<Patient[]> {
     
     const patientsJson = await AsyncStorage.getItem(PATIENTS_KEY);
     
-    // CASE 1: No data exists yet (first launch or after clear)
     if (!patientsJson || patientsJson === '' || patientsJson === 'null' || patientsJson === 'undefined') {
-      console.log('[LocalStorage] No patients found in storage (null/empty), returning empty array');
+      console.log('[LocalStorage] No patients found in storage, returning empty array');
       return [];
     }
     
     console.log('[LocalStorage] Raw data length:', patientsJson.length, 'characters');
     
-    // CASE 2: Try to parse the data
     let patients: any[];
     try {
       patients = JSON.parse(patientsJson);
       console.log('[LocalStorage] JSON parse successful');
     } catch (parseError) {
       console.error('[LocalStorage] JSON parse FAILED - data corrupted. Resetting to empty array.', parseError);
-      // Data is corrupted - reset to empty array and save
       try {
         await AsyncStorage.setItem(PATIENTS_KEY, JSON.stringify([]));
         console.log('[LocalStorage] Corrupted data reset to empty array');
@@ -125,9 +111,8 @@ export async function getAllPatients(): Promise<Patient[]> {
       return [];
     }
     
-    // CASE 3: Parsed data is not an array
     if (!Array.isArray(patients)) {
-      console.error('[LocalStorage] Parsed data is not an array (type:', typeof patients, '). Resetting to empty array.');
+      console.error('[LocalStorage] Parsed data is not an array. Resetting to empty array.');
       try {
         await AsyncStorage.setItem(PATIENTS_KEY, JSON.stringify([]));
         console.log('[LocalStorage] Non-array data reset to empty array');
@@ -139,39 +124,31 @@ export async function getAllPatients(): Promise<Patient[]> {
     
     console.log('[LocalStorage] Found', patients.length, 'patients in storage');
     
-    // CASE 4: Ensure all patients have required fields and convert dates
     const validPatients: Patient[] = [];
     let skippedCount = 0;
     
     for (let i = 0; i < patients.length; i++) {
       try {
         const patient = patients[i];
-        
-        // Ensure patient integrity (adds missing fields)
         const validPatient = ensurePatientIntegrity(patient);
         
-        // Convert date strings back to Date objects
         const patientWithDates: Patient = {
           ...validPatient,
           operationDateTime: validPatient.operationDateTime ? new Date(validPatient.operationDateTime) : undefined,
           createdAt: new Date(validPatient.createdAt),
           updatedAt: new Date(validPatient.updatedAt),
-          // Convert vitals timestamps
           vitals: (validPatient.vitals || []).map((v: any) => ({
             ...v,
             timestamp: new Date(v.timestamp),
           })),
-          // Convert labs timestamps
           labs: (validPatient.labs || []).map((l: any) => ({
             ...l,
             timestamp: new Date(l.timestamp),
           })),
-          // Convert vitalEntries timestamps
           vitalEntries: (validPatient.vitalEntries || []).map((v: any) => ({
             ...v,
             timestamp: new Date(v.timestamp),
           })),
-          // Convert labEntries timestamps
           labEntries: (validPatient.labEntries || []).map((l: any) => ({
             ...l,
             timestamp: new Date(l.timestamp),
@@ -188,11 +165,6 @@ export async function getAllPatients(): Promise<Patient[]> {
     console.log('[LocalStorage] Successfully processed', validPatients.length, 'valid patients');
     if (skippedCount > 0) {
       console.log('[LocalStorage] Skipped', skippedCount, 'corrupted patients');
-    }
-    
-    // If we had to skip any patients, save the cleaned array back
-    if (skippedCount > 0) {
-      console.log('[LocalStorage] Saving cleaned patient data back to storage');
       try {
         await saveAllPatients(validPatients);
       } catch (saveError) {
@@ -204,54 +176,47 @@ export async function getAllPatients(): Promise<Patient[]> {
     return validPatients;
   } catch (error) {
     console.error('[LocalStorage] CRITICAL ERROR in getAllPatients - returning empty array:', error);
-    // NEVER throw - return empty array so app doesn't crash
     return [];
   }
 }
 
 /**
- * PRODUCTION-HARDENED: Get a single patient by ID
- * Returns null if not found (never throws)
- * Automatically reloads from storage to ensure fresh data
+ * PRODUCTION-HARDENED: Get a single patient by patientId
  */
-export async function getPatientById(id: string): Promise<Patient | null> {
+export async function getPatientById(patientId: string): Promise<Patient | null> {
   try {
     console.log('[LocalStorage] ========== GET PATIENT BY ID START ==========');
-    console.log('[LocalStorage] Looking for patient ID:', id);
+    console.log('[LocalStorage] Looking for patientId:', patientId);
     
     const patients = await getAllPatients();
     console.log('[LocalStorage] Loaded', patients.length, 'patients from storage');
     
-    const patient = patients.find(p => p.id === id);
+    const patient = patients.find(p => p.patientId === patientId);
     
     if (!patient) {
-      console.log('[LocalStorage] Patient NOT FOUND with ID:', id);
+      console.log('[LocalStorage] Patient NOT FOUND with patientId:', patientId);
       return null;
     }
     
-    console.log('[LocalStorage] Patient FOUND:', patient.name, '| ID:', patient.id);
+    console.log('[LocalStorage] Patient FOUND:', patient.name, '| patientId:', patient.patientId);
     console.log('[LocalStorage] Patient has', patient.vitalEntries?.length || 0, 'vital entries and', patient.labEntries?.length || 0, 'lab entries');
     console.log('[LocalStorage] ========== GET PATIENT BY ID END ==========');
     
     return patient;
   } catch (error) {
     console.error('[LocalStorage] Error in getPatientById - returning null:', error);
-    // NEVER throw - return null so app doesn't crash
     return null;
   }
 }
 
 /**
  * PRODUCTION-HARDENED: Save all patients to local storage
- * Verifies write succeeded by reading back
- * Throws error if verification fails (caller should handle)
  */
 async function saveAllPatients(patients: Patient[]): Promise<void> {
   try {
     console.log('[LocalStorage] ========== SAVE ALL PATIENTS START ==========');
     console.log('[LocalStorage] Saving', patients.length, 'patients to AsyncStorage');
     
-    // Ensure all patients have required fields before saving
     const validPatients = patients.map(ensurePatientIntegrity);
     
     const patientsJson = JSON.stringify(validPatients);
@@ -260,7 +225,6 @@ async function saveAllPatients(patients: Patient[]): Promise<void> {
     await AsyncStorage.setItem(PATIENTS_KEY, patientsJson);
     console.log('[LocalStorage] AsyncStorage.setItem completed');
     
-    // CRITICAL: Verify the save by reading back
     console.log('[LocalStorage] Verifying save by reading back...');
     const verifyJson = await AsyncStorage.getItem(PATIENTS_KEY);
     
@@ -293,43 +257,35 @@ async function saveAllPatients(patients: Patient[]): Promise<void> {
 
 /**
  * Create a new patient
- * CRITICAL: This APPENDS to the existing list, does NOT overwrite
- * Returns the created patient with generated ID and timestamps
  */
-export async function createPatient(patientData: Omit<Patient, 'id' | 'userId' | 'createdAt' | 'updatedAt'>): Promise<Patient> {
+export async function createPatient(patientData: Omit<Patient, 'patientId' | 'userId' | 'createdAt' | 'updatedAt'>): Promise<Patient> {
   try {
     console.log('[LocalStorage] ========== CREATE PATIENT START ==========');
     console.log('[LocalStorage] Creating new patient:', patientData.name);
     
-    // STEP 1: Load existing patients from storage
     const existingPatients = await getAllPatients();
     console.log('[LocalStorage] Current patient count BEFORE create:', existingPatients.length);
     
-    // STEP 2: Generate unique ID
-    const newId = `patient_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-    console.log('[LocalStorage] Generated new patient ID:', newId);
+    const newPatientId = `patient_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    console.log('[LocalStorage] Generated new patientId:', newPatientId);
     
-    // STEP 3: Create new patient object with all required fields
     const newPatient: Patient = ensurePatientIntegrity({
       ...patientData,
-      id: newId,
+      patientId: newPatientId,
       userId: 'local-user',
       createdAt: new Date(),
       updatedAt: new Date(),
     });
     
-    console.log('[LocalStorage] New patient object created with ID:', newPatient.id, '| Name:', newPatient.name);
+    console.log('[LocalStorage] New patient object created with patientId:', newPatient.patientId, '| Name:', newPatient.name);
     
-    // STEP 4: APPEND to existing list (NOT replace)
     const updatedPatients = [...existingPatients, newPatient];
     console.log('[LocalStorage] Patient list updated. New count:', updatedPatients.length);
     
-    // STEP 5: Save the updated list back to storage
     await saveAllPatients(updatedPatients);
     
-    // STEP 6: Verify by re-reading from storage
     console.log('[LocalStorage] Verifying patient was saved...');
-    const savedPatient = await getPatientById(newId);
+    const savedPatient = await getPatientById(newPatientId);
     if (!savedPatient) {
       throw new Error('Verification FAILED: Patient not found after save');
     }
@@ -346,42 +302,37 @@ export async function createPatient(patientData: Omit<Patient, 'id' | 'userId' |
 
 /**
  * Update an existing patient
- * ALL fields are updated - no partial saves
- * Automatically recalculates auto-status after update
  */
-export async function updatePatient(id: string, patientData: Partial<Patient>): Promise<Patient> {
+export async function updatePatient(patientId: string, patientData: Partial<Patient>): Promise<Patient> {
   try {
     console.log('[LocalStorage] ========== UPDATE PATIENT START ==========');
-    console.log('[LocalStorage] Updating patient ID:', id);
+    console.log('[LocalStorage] Updating patientId:', patientId);
     
     const patients = await getAllPatients();
     console.log('[LocalStorage] Current patient count:', patients.length);
     
-    const patientIndex = patients.findIndex(p => p.id === id);
+    const patientIndex = patients.findIndex(p => p.patientId === patientId);
     
     if (patientIndex === -1) {
-      console.error('[LocalStorage] Patient NOT FOUND with ID:', id);
+      console.error('[LocalStorage] Patient NOT FOUND with patientId:', patientId);
       throw new Error('Patient not found');
     }
     
     console.log('[LocalStorage] Found patient at index:', patientIndex);
     
-    // Update ALL fields provided in patientData
     const updatedPatient: Patient = ensurePatientIntegrity({
       ...patients[patientIndex],
       ...patientData,
-      id, // Ensure ID doesn't change
-      userId: 'local-user', // Ensure userId stays consistent
-      updatedAt: new Date(), // Update timestamp
+      patientId,
+      userId: 'local-user',
+      updatedAt: new Date(),
     });
     
-    // Recalculate auto-status
     const autoStatusResult = calculateAutoStatus(updatedPatient);
     updatedPatient.computedStatus = autoStatusResult.status;
     updatedPatient.abnormalCount = autoStatusResult.abnormalCount;
     updatedPatient.mostRecentAbnormalTimestamp = autoStatusResult.mostRecentAbnormalTimestamp;
     
-    // If in auto mode, update alertStatus
     if (updatedPatient.statusMode !== 'manual') {
       updatedPatient.alertStatus = autoStatusResult.status;
       console.log('[LocalStorage] Auto-status updated to:', autoStatusResult.status, '| Abnormalities:', autoStatusResult.abnormalCount);
@@ -395,8 +346,7 @@ export async function updatePatient(id: string, patientData: Partial<Patient>): 
     
     console.log('[LocalStorage] Patient updated successfully');
     
-    // Re-read from storage to confirm persistence
-    const savedPatient = await getPatientById(id);
+    const savedPatient = await getPatientById(patientId);
     if (!savedPatient) {
       throw new Error('Verification FAILED: Patient not found after update');
     }
@@ -413,19 +363,17 @@ export async function updatePatient(id: string, patientData: Partial<Patient>): 
 
 /**
  * Add a vital entry to a patient
- * Generates unique ID and appends to vitalEntries array
- * Automatically recalculates auto-status
  */
 export async function addVitalEntry(patientId: string, vitalEntry: Omit<VitalEntry, 'id'>): Promise<Patient> {
   try {
     console.log('[LocalStorage] ========== ADD VITAL ENTRY START ==========');
-    console.log('[LocalStorage] Adding vital entry to patient:', patientId);
+    console.log('[LocalStorage] Adding vital entry to patientId:', patientId);
     
     const patients = await getAllPatients();
-    const patientIndex = patients.findIndex(p => p.id === patientId);
+    const patientIndex = patients.findIndex(p => p.patientId === patientId);
     
     if (patientIndex === -1) {
-      console.error('[LocalStorage] Patient NOT FOUND with ID:', patientId);
+      console.error('[LocalStorage] Patient NOT FOUND with patientId:', patientId);
       throw new Error('Patient not found');
     }
     
@@ -433,20 +381,16 @@ export async function addVitalEntry(patientId: string, vitalEntry: Omit<VitalEnt
     console.log('[LocalStorage] Found patient:', patient.name);
     console.log('[LocalStorage] Current vital entries count:', patient.vitalEntries?.length || 0);
     
-    // Generate unique ID for the vital entry
     const newVitalEntry: VitalEntry = {
       ...vitalEntry,
       id: generateId(),
     };
     
     console.log('[LocalStorage] Generated vital entry ID:', newVitalEntry.id);
-    console.log('[LocalStorage] Vital entry data:', JSON.stringify(newVitalEntry));
     
-    // Append to vitalEntries array
     const updatedVitalEntries = [...(patient.vitalEntries || []), newVitalEntry];
     console.log('[LocalStorage] New vital entries count:', updatedVitalEntries.length);
     
-    // Update patient with new vitalEntries array
     const updatedPatient = await updatePatient(patientId, {
       vitalEntries: updatedVitalEntries,
     });
@@ -464,20 +408,17 @@ export async function addVitalEntry(patientId: string, vitalEntry: Omit<VitalEnt
 
 /**
  * Add a lab entry to a patient
- * Generates unique ID and appends to labEntries array
- * Automatically converts US units to Canadian units if detected
- * Automatically recalculates auto-status
  */
 export async function addLabEntry(patientId: string, labEntry: Omit<LabEntry, 'id'>): Promise<Patient> {
   try {
     console.log('[LocalStorage] ========== ADD LAB ENTRY START ==========');
-    console.log('[LocalStorage] Adding lab entry to patient:', patientId);
+    console.log('[LocalStorage] Adding lab entry to patientId:', patientId);
     
     const patients = await getAllPatients();
-    const patientIndex = patients.findIndex(p => p.id === patientId);
+    const patientIndex = patients.findIndex(p => p.patientId === patientId);
     
     if (patientIndex === -1) {
-      console.error('[LocalStorage] Patient NOT FOUND with ID:', patientId);
+      console.error('[LocalStorage] Patient NOT FOUND with patientId:', patientId);
       throw new Error('Patient not found');
     }
     
@@ -485,23 +426,18 @@ export async function addLabEntry(patientId: string, labEntry: Omit<LabEntry, 'i
     console.log('[LocalStorage] Found patient:', patient.name);
     console.log('[LocalStorage] Current lab entries count:', patient.labEntries?.length || 0);
     
-    // Migrate to Canadian units if needed
     const migratedLabEntry = migrateLabEntryToCanadian(labEntry);
     
-    // Generate unique ID for the lab entry
     const newLabEntry: LabEntry = {
       ...migratedLabEntry,
       id: generateId(),
     };
     
     console.log('[LocalStorage] Generated lab entry ID:', newLabEntry.id);
-    console.log('[LocalStorage] Lab entry data (Canadian units):', JSON.stringify(newLabEntry));
     
-    // Append to labEntries array
     const updatedLabEntries = [...(patient.labEntries || []), newLabEntry];
     console.log('[LocalStorage] New lab entries count:', updatedLabEntries.length);
     
-    // Update patient with new labEntries array
     const updatedPatient = await updatePatient(patientId, {
       labEntries: updatedLabEntries,
     });
@@ -519,12 +455,11 @@ export async function addLabEntry(patientId: string, labEntry: Omit<LabEntry, 'i
 
 /**
  * Delete a vital entry from a patient
- * Automatically recalculates auto-status
  */
 export async function deleteVitalEntry(patientId: string, vitalEntryId: string): Promise<Patient> {
   try {
     console.log('[LocalStorage] ========== DELETE VITAL ENTRY START ==========');
-    console.log('[LocalStorage] Deleting vital entry:', vitalEntryId, 'from patient:', patientId);
+    console.log('[LocalStorage] Deleting vital entry:', vitalEntryId, 'from patientId:', patientId);
     
     const patient = await getPatientById(patientId);
     if (!patient) {
@@ -557,12 +492,11 @@ export async function deleteVitalEntry(patientId: string, vitalEntryId: string):
 
 /**
  * Delete a lab entry from a patient
- * Automatically recalculates auto-status
  */
 export async function deleteLabEntry(patientId: string, labEntryId: string): Promise<Patient> {
   try {
     console.log('[LocalStorage] ========== DELETE LAB ENTRY START ==========');
-    console.log('[LocalStorage] Deleting lab entry:', labEntryId, 'from patient:', patientId);
+    console.log('[LocalStorage] Deleting lab entry:', labEntryId, 'from patientId:', patientId);
     
     const patient = await getPatientById(patientId);
     if (!patient) {
@@ -596,18 +530,18 @@ export async function deleteLabEntry(patientId: string, labEntryId: string): Pro
 /**
  * Delete a patient permanently
  */
-export async function deletePatient(id: string): Promise<void> {
+export async function deletePatient(patientId: string): Promise<void> {
   try {
     console.log('[LocalStorage] ========== DELETE PATIENT START ==========');
-    console.log('[LocalStorage] Deleting patient ID:', id);
+    console.log('[LocalStorage] Deleting patientId:', patientId);
     
     const patients = await getAllPatients();
     console.log('[LocalStorage] Current patient count BEFORE delete:', patients.length);
     
-    const filteredPatients = patients.filter(p => p.id !== id);
+    const filteredPatients = patients.filter(p => p.patientId !== patientId);
     
     if (filteredPatients.length === patients.length) {
-      console.error('[LocalStorage] Patient NOT FOUND with ID:', id);
+      console.error('[LocalStorage] Patient NOT FOUND with patientId:', patientId);
       throw new Error('Patient not found');
     }
     
@@ -617,8 +551,7 @@ export async function deletePatient(id: string): Promise<void> {
     
     console.log('[LocalStorage] Patient deleted from storage');
     
-    // Verify deletion
-    const deletedPatient = await getPatientById(id);
+    const deletedPatient = await getPatientById(patientId);
     if (deletedPatient) {
       throw new Error('Verification FAILED: Patient still exists after delete');
     }
@@ -632,7 +565,7 @@ export async function deletePatient(id: string): Promise<void> {
 }
 
 /**
- * Clear all patient data (for testing/reset purposes)
+ * Clear all patient data
  */
 export async function clearAllPatients(): Promise<void> {
   try {
@@ -649,24 +582,40 @@ export async function clearAllPatients(): Promise<void> {
 
 /**
  * PRODUCTION-HARDENED: One-time migration
- * Imports any existing patients from old backend-based storage
- * Ensures all patients have required fields
- * Migrates lab values to Canadian units
- * 
- * NEVER crashes - always completes successfully
+ * CRITICAL: Migrates id -> patientId field name
  */
 export async function migrateExistingData(): Promise<void> {
   try {
     console.log('[LocalStorage] ========== MIGRATION START ==========');
     
+    // Check if patientId migration already ran
+    const patientIdMigrated = await AsyncStorage.getItem(PATIENTID_MIGRATION_FLAG);
+    if (patientIdMigrated !== 'true') {
+      console.log('[LocalStorage] Running patientId field migration (id -> patientId)');
+      
+      const patients = await getAllPatients();
+      if (patients.length > 0) {
+        console.log('[LocalStorage] Migrating', patients.length, 'patients to use patientId field');
+        
+        // ensurePatientIntegrity already handles id -> patientId migration
+        const migratedPatients = patients.map(ensurePatientIntegrity);
+        
+        await saveAllPatients(migratedPatients);
+        console.log('[LocalStorage] patientId migration complete');
+      }
+      
+      await AsyncStorage.setItem(PATIENTID_MIGRATION_FLAG, 'true');
+    } else {
+      console.log('[LocalStorage] patientId migration already completed');
+    }
+    
     // Check if basic migration already ran
     const migrated = await AsyncStorage.getItem(MIGRATION_FLAG_KEY);
     if (migrated === 'true') {
-      console.log('[LocalStorage] Basic migration already completed, skipping');
+      console.log('[LocalStorage] Basic migration already completed');
     } else {
       console.log('[LocalStorage] Running one-time data migration');
       
-      // Check for old storage key
       const oldKey = '@opmgmt_patients';
       const oldData = await AsyncStorage.getItem(oldKey);
       
@@ -676,14 +625,11 @@ export async function migrateExistingData(): Promise<void> {
           const oldPatients = JSON.parse(oldData);
           console.log('[LocalStorage] Migrating', oldPatients.length, 'patients from old storage');
           
-          // Migrate each patient to ensure all required fields exist
           const migratedPatients = oldPatients.map((patient: any) => ensurePatientIntegrity(patient));
           
-          // Save to new key
           await AsyncStorage.setItem(PATIENTS_KEY, JSON.stringify(migratedPatients));
           console.log('[LocalStorage] Migration complete, removing old key');
           
-          // Remove old key
           await AsyncStorage.removeItem(oldKey);
         } catch (oldDataError) {
           console.error('[LocalStorage] Error migrating old data (non-fatal), skipping:', oldDataError);
@@ -694,7 +640,6 @@ export async function migrateExistingData(): Promise<void> {
       console.log('[LocalStorage] Basic migration complete');
     }
     
-    // CRITICAL: Ensure all existing patients have required fields
     console.log('[LocalStorage] Ensuring all patients have required fields...');
     const existingPatients = await getAllPatients();
     console.log('[LocalStorage] Found', existingPatients.length, 'patients in storage');
@@ -702,8 +647,7 @@ export async function migrateExistingData(): Promise<void> {
     if (existingPatients.length > 0) {
       let needsSave = false;
       const updatedPatients = existingPatients.map(patient => {
-        // Check if patient is missing any required fields
-        if (!patient.vitalEntries || !patient.labEntries || !patient.id) {
+        if (!patient.vitalEntries || !patient.labEntries || !patient.patientId) {
           needsSave = true;
           console.log('[LocalStorage] Fixing patient:', patient.name);
           return ensurePatientIntegrity(patient);
@@ -732,7 +676,6 @@ export async function migrateExistingData(): Promise<void> {
       const migratedPatients = patients.map(patient => {
         let patientMigrated = false;
         
-        // Migrate lab entries
         const migratedLabEntries = (patient.labEntries || []).map(labEntry => {
           const migrated = migrateLabEntryToCanadian(labEntry);
           if (JSON.stringify(migrated) !== JSON.stringify(labEntry)) {
@@ -765,11 +708,10 @@ export async function migrateExistingData(): Promise<void> {
     console.log('[LocalStorage] ========== MIGRATION END ==========');
   } catch (error) {
     console.error('[LocalStorage] Error during migration (non-fatal):', error);
-    // Don't throw - migration failure shouldn't break the app
-    // Mark migrations as complete so we don't retry on every launch
     try {
       await AsyncStorage.setItem(MIGRATION_FLAG_KEY, 'true');
       await AsyncStorage.setItem(CANADIAN_UNITS_MIGRATION_FLAG, 'true');
+      await AsyncStorage.setItem(PATIENTID_MIGRATION_FLAG, 'true');
       console.log('[LocalStorage] Migration flags set despite error to prevent retry loop');
     } catch (flagError) {
       console.error('[LocalStorage] Could not set migration flags:', flagError);

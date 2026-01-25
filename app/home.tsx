@@ -31,18 +31,13 @@ export default function HomeScreen() {
   const [deleting, setDeleting] = useState(false);
 
   const loadPatients = useCallback(async () => {
+    console.log('[HomeScreen] Loading patients from storage');
     setLoading(true);
     try {
       const patientsData = await getAllPatients();
+      console.log('[HomeScreen] Loaded', patientsData.length, 'patients');
       
-      const patientsWithIds = patientsData.map(p => {
-        if (!p.id) {
-          return { ...p, id: `patient_${Date.now()}_${Math.random().toString(36).substr(2, 9)}` };
-        }
-        return p;
-      });
-      
-      const patientsWithAutoStatus = patientsWithIds.map(patient => {
+      const patientsWithAutoStatus = patientsData.map(patient => {
         const autoStatusResult = calculateAutoStatus(patient);
         const updatedPatient = {
           ...patient,
@@ -136,7 +131,8 @@ export default function HomeScreen() {
   };
 
   const handlePatientPress = (patientId: string) => {
-    navigation.navigate('PatientDetail' as never, { id: patientId } as never);
+    console.log('[HomeScreen] User tapped patient card, navigating to PatientDetail with patientId:', patientId);
+    navigation.navigate('PatientDetail' as never, { patientId } as never);
   };
 
   const handleAddPatient = () => {
@@ -156,11 +152,11 @@ export default function HomeScreen() {
     setDeleting(true);
     
     try {
-      await deletePatient(patientToDelete.id);
+      await deletePatient(patientToDelete.patientId);
       
       const verifyPatients = await getAllPatients();
       
-      const stillExists = verifyPatients.find(p => p.id === patientToDelete.id);
+      const stillExists = verifyPatients.find(p => p.patientId === patientToDelete.patientId);
       if (stillExists) {
         throw new Error('Failed to verify patient was deleted');
       }
@@ -253,7 +249,7 @@ export default function HomeScreen() {
     return (
       <View style={styles.patientCard}>
         <TouchableOpacity
-          onPress={() => handlePatientPress(patient.id)}
+          onPress={() => handlePatientPress(patient.patientId)}
           activeOpacity={0.7}
           style={styles.patientCardTouchable}
         >
@@ -443,7 +439,7 @@ export default function HomeScreen() {
           <FlatList
             data={sortedPatients}
             renderItem={renderPatientCard}
-            keyExtractor={(item) => item.id}
+            keyExtractor={(item) => item.patientId}
             contentContainerStyle={styles.listContent}
             showsVerticalScrollIndicator={false}
           />

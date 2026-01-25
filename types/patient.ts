@@ -11,87 +11,81 @@ export interface UserProfile {
   fullName: string;
   pronouns?: string;
   role: UserRole;
-  roleYear?: number; // 1-4 for medical students, year for residents
+  roleYear?: number;
   residencyProgram?: string;
-  affiliation?: string; // Hospital or university
+  affiliation?: string;
   profilePicture?: string;
   createdAt: Date;
   updatedAt: Date;
 }
 
-// Legacy VitalSigns interface (kept for backward compatibility)
 export interface VitalSigns {
   id?: string;
   heartRate: number;
   systolicBP: number;
   diastolicBP: number;
   temperature: number;
-  urineOutput?: number; // ml/hr
+  urineOutput?: number;
   timestamp: Date;
 }
 
-// Legacy LabValues interface (kept for backward compatibility)
 export interface LabValues {
   id?: string;
-  wbc: number; // White blood cell count
+  wbc: number;
   hemoglobin: number;
   creatinine: number;
   lactate?: number;
   timestamp: Date;
 }
 
-// NEW: Comprehensive VitalEntry interface with all fields
 export interface VitalEntry {
   id: string;
   timestamp: Date;
-  hr?: number; // Heart rate
-  bpSys?: number; // Systolic BP
-  bpDia?: number; // Diastolic BP
-  rr?: number; // Respiratory rate
-  temp?: number; // Temperature
-  spo2?: number; // SpO2
-  urineOutput?: number; // ml/hr
-  pain?: number; // Pain scale 0-10
+  hr?: number;
+  bpSys?: number;
+  bpDia?: number;
+  rr?: number;
+  temp?: number;
+  spo2?: number;
+  urineOutput?: number;
+  pain?: number;
   notes?: string;
 }
 
-// NEW: Comprehensive LabEntry interface with all fields
 export interface LabEntry {
   id: string;
   timestamp: Date;
-  wbc?: number; // White blood cell count
-  hb?: number; // Hemoglobin
-  plt?: number; // Platelets
-  na?: number; // Sodium
-  k?: number; // Potassium
-  cr?: number; // Creatinine
+  wbc?: number;
+  hb?: number;
+  plt?: number;
+  na?: number;
+  k?: number;
+  cr?: number;
   lactate?: number;
-  bili?: number; // Bilirubin
-  alt?: number; // ALT
-  ast?: number; // AST
-  inr?: number; // INR
+  bili?: number;
+  alt?: number;
+  ast?: number;
+  inr?: number;
   notes?: string;
 }
 
 export interface Patient {
-  id: string;
+  // CRITICAL: Use patientId as the single stable identifier
+  patientId: string;
   userId: string;
   name: string;
-  idStatement?: string; // Brief 1-2 line ID statement
+  idStatement?: string;
   procedureType: string;
-  postOpDay: number; // POD
+  postOpDay: number;
   alertStatus: AlertStatus;
   
-  // Manual status override fields
-  statusMode?: 'auto' | 'manual'; // Default: 'auto'
-  manualStatus?: AlertStatus; // User-selected status when statusMode is 'manual'
-  computedStatus?: AlertStatus; // Auto-calculated status for reference
+  statusMode?: 'auto' | 'manual';
+  manualStatus?: AlertStatus;
+  computedStatus?: AlertStatus;
   
-  // Priority sorting fields (for Red status patients)
-  abnormalCount?: number; // Number of out-of-range values
-  mostRecentAbnormalTimestamp?: Date; // Timestamp of most recent abnormal value
+  abnormalCount?: number;
+  mostRecentAbnormalTimestamp?: Date;
   
-  // Operation details
   preOpDiagnosis?: string;
   postOpDiagnosis?: string;
   specimensTaken?: string;
@@ -104,17 +98,18 @@ export interface Patient {
   clinicalStatus?: string;
   hospitalLocation?: string;
   
-  // Legacy vitals/labs arrays (kept for backward compatibility)
   vitals: VitalSigns[];
   labs: LabValues[];
   
-  // NEW: Comprehensive vitals/labs arrays
   vitalEntries?: VitalEntry[];
   labEntries?: LabEntry[];
   
   notes?: string;
   createdAt: Date;
   updatedAt: Date;
+  
+  // DEPRECATED: Keep for backward compatibility during migration
+  id?: string;
 }
 
 export interface Alert {
@@ -123,9 +118,9 @@ export interface Alert {
   severity: AlertStatus;
   title: string;
   description: string;
-  triggeredBy: string[]; // Which trends triggered this
-  considerations: string[]; // What to consider
-  cognitivePrompts: string[]; // Actions to take
+  triggeredBy: string[];
+  considerations: string[];
+  cognitivePrompts: string[];
   timestamp: Date;
 }
 

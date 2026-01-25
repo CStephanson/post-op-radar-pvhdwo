@@ -13,6 +13,7 @@ import {
   Alert,
   Pressable,
   FlatList,
+  ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { colors, typography, spacing, borderRadius, shadows } from '@/styles/commonStyles';
@@ -24,7 +25,10 @@ import { CANADIAN_LAB_RANGES, CANADIAN_VITAL_RANGES, checkVitalAbnormalities, ch
 import { calculateAutoStatus } from '@/utils/autoStatus';
 
 export default function PatientDetailScreen({ route, navigation }: any) {
-  const { id } = route.params;
+  // CRITICAL: Read patientId from route params
+  const { patientId } = route.params;
+  
+  console.log('[PatientDetail] Screen mounted with patientId:', patientId);
   
   const [patient, setPatient] = useState<Patient | null>(null);
   const [alerts, setAlerts] = useState<PatientAlert[]>([]);
@@ -63,20 +67,23 @@ export default function PatientDetailScreen({ route, navigation }: any) {
 
   const loadPatientData = useCallback(async () => {
     try {
-      console.log('[PatientDetail] Loading patient data for ID:', id);
+      console.log('[PatientDetail] Loading patient data for patientId:', patientId);
       setLoading(true);
       setLoadError(false);
       
-      const patientData = await getPatientById(id as string);
+      // CRITICAL: Load from storage using patientId
+      const patientData = await getPatientById(patientId as string);
       
       if (!patientData) {
-        console.log('[PatientDetail] Patient not found with ID:', id);
+        console.log('[PatientDetail] Patient NOT FOUND with patientId:', patientId);
         setLoadError(true);
         setLoading(false);
         return;
       }
       
-      console.log('[PatientDetail] Patient loaded successfully:', patientData.name);
+      console.log('[PatientDetail] Patient loaded successfully:', patientData.name, '| patientId:', patientData.patientId);
+      console.log('[PatientDetail] Patient has', patientData.vitalEntries?.length || 0, 'vital entries and', patientData.labEntries?.length || 0, 'lab entries');
+      
       setPatient(patientData);
       updatePatientAnalysis(patientData);
       setLoadError(false);
@@ -86,7 +93,7 @@ export default function PatientDetailScreen({ route, navigation }: any) {
     } finally {
       setLoading(false);
     }
-  }, [id]);
+  }, [patientId]);
 
   useEffect(() => {
     loadPatientData();
@@ -109,6 +116,7 @@ export default function PatientDetailScreen({ route, navigation }: any) {
   };
 
   const openEditModal = (type: 'vitals' | 'labs') => {
+    console.log('[PatientDetail] User opened', type, 'edit modal');
     setEditType(type);
     
     if (type === 'vitals') {
@@ -145,7 +153,7 @@ export default function PatientDetailScreen({ route, navigation }: any) {
     }
     
     try {
-      console.log('[PatientDetail] Saving', editType, 'entry for patient:', patient.name);
+      console.log('[PatientDetail] User saving', editType, 'entry for patient:', patient.name);
       
       if (editType === 'vitals') {
         const hasValue = editHr || editBpSys || editBpDia || editRr || editTemp || editSpo2 || editUrineOutput || editPain;
@@ -168,7 +176,7 @@ export default function PatientDetailScreen({ route, navigation }: any) {
         };
         
         console.log('[PatientDetail] Adding vital entry:', newVitalEntry);
-        const updatedPatient = await addVitalEntry(patient.id, newVitalEntry);
+        const updatedPatient = await addVitalEntry(patient.patientId, newVitalEntry);
         
         console.log('[PatientDetail] Vital entry saved successfully');
         setPatient(updatedPatient);
@@ -199,7 +207,7 @@ export default function PatientDetailScreen({ route, navigation }: any) {
         };
         
         console.log('[PatientDetail] Adding lab entry:', newLabEntry);
-        const updatedPatient = await addLabEntry(patient.id, newLabEntry);
+        const updatedPatient = await addLabEntry(patient.patientId, newLabEntry);
         
         console.log('[PatientDetail] Lab entry saved successfully');
         setPatient(updatedPatient);
@@ -243,9 +251,9 @@ export default function PatientDetailScreen({ route, navigation }: any) {
       let updatedPatient: Patient;
       
       if (deleteTarget.type === 'vitals') {
-        updatedPatient = await deleteVitalEntry(patient.id, deleteTarget.id);
+        updatedPatient = await deleteVitalEntry(patient.patientId, deleteTarget.id);
       } else {
-        updatedPatient = await deleteLabEntry(patient.id, deleteTarget.id);
+        updatedPatient = await deleteLabEntry(patient.patientId, deleteTarget.id);
       }
       
       setPatient(updatedPatient);
@@ -303,10 +311,12 @@ export default function PatientDetailScreen({ route, navigation }: any) {
     );
   }
 
+  // HARDENED: Show loading state while fetching from storage
   if (loading || !patient) {
     return (
       <SafeAreaView style={styles.safeArea}>
         <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color={colors.primary} />
           <Text style={styles.loadingText}>Loading patient data...</Text>
         </View>
       </SafeAreaView>
@@ -390,7 +400,6 @@ export default function PatientDetailScreen({ route, navigation }: any) {
   const renderVitalEntry = ({ item }: { item: VitalEntry }) => {
     const timestampText = formatTimestamp(new Date(item.timestamp));
     
-    // Check for abnormalities
     const abnormalities = checkVitalAbnormalities(item);
     const abnormalFields = new Set(abnormalities.map(a => a.field));
     
@@ -559,7 +568,6 @@ export default function PatientDetailScreen({ route, navigation }: any) {
   const renderLabEntry = ({ item }: { item: LabEntry }) => {
     const timestampText = formatTimestamp(new Date(item.timestamp));
     
-    // Check for abnormalities
     const abnormalities = checkLabAbnormalities(item);
     const abnormalFields = new Set(abnormalities.map(a => a.field));
     
@@ -866,7 +874,7 @@ export default function PatientDetailScreen({ route, navigation }: any) {
         <View style={styles.section}>
           <TouchableOpacity
             style={styles.infoLinkCard}
-            onPress={() => navigation.navigate('PatientInfo', { id })}
+            onPress={() => navigation.navigate('PatientInfo', { patientId })}
           >
             <View style={styles.infoLinkLeft}>
               <IconSymbol
@@ -1395,6 +1403,7 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
+    gap: spacing.lg,
   },
   loadingText: {
     fontSize: typography.body,

@@ -21,7 +21,9 @@ import DateTimePicker from '@react-native-community/datetimepicker';
 export default function PatientInfoScreen() {
   const navigation = useNavigation();
   const route = useRoute();
-  const { id } = route.params as { id: string };
+  const { patientId } = route.params as { patientId: string };
+  
+  console.log('[PatientInfo] Screen mounted with patientId:', patientId);
   
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -110,9 +112,9 @@ export default function PatientInfoScreen() {
         manualStatus,
       };
       
-      await updatePatient(id as string, patientData);
+      await updatePatient(patientId as string, patientData);
       
-      const savedPatient = await getPatientById(id as string);
+      const savedPatient = await getPatientById(patientId as string);
       
       if (!savedPatient) {
         throw new Error('Failed to verify patient was saved');
@@ -170,13 +172,14 @@ export default function PatientInfoScreen() {
     } finally {
       setSaving(false);
     }
-  }, [id, name, idStatement, procedureType, preOpDiagnosis, postOpDiagnosis, specimensTaken, estimatedBloodLoss, complications, operationDateTime, surgeon, anesthesiologist, anesthesiaType, clinicalStatus, hospitalLocation, statusMode, manualStatus, navigation]);
+  }, [patientId, name, idStatement, procedureType, preOpDiagnosis, postOpDiagnosis, specimensTaken, estimatedBloodLoss, complications, operationDateTime, surgeon, anesthesiologist, anesthesiaType, clinicalStatus, hospitalLocation, statusMode, manualStatus, navigation]);
 
   const loadPatientInfo = useCallback(async () => {
+    console.log('[PatientInfo] Loading patient info for patientId:', patientId);
     setLoading(true);
     try {
       const { getPatientById } = await import('@/utils/localStorage');
-      const patient = await getPatientById(id as string);
+      const patient = await getPatientById(patientId as string);
       
       if (!patient) {
         Alert.alert('Error', 'Patient not found', [
@@ -230,7 +233,7 @@ export default function PatientInfoScreen() {
     } finally {
       setLoading(false);
     }
-  }, [id, navigation]);
+  }, [patientId, navigation]);
 
   // Unsaved changes protection
   const { handleBackPress, isNavigating } = useUnsavedChanges({
@@ -279,9 +282,9 @@ export default function PatientInfoScreen() {
             try {
               const { deletePatient, getPatientById } = await import('@/utils/localStorage');
               
-              await deletePatient(id as string);
+              await deletePatient(patientId as string);
               
-              const deletedPatient = await getPatientById(id as string);
+              const deletedPatient = await getPatientById(patientId as string);
               if (deletedPatient) {
                 throw new Error('Failed to verify patient was deleted');
               }
